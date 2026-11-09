@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { X, ShoppingBag, Heart, MessageCircle, Check, ShieldCheck, MapPin } from 'lucide-react';
+import { X, ShoppingBag, Heart, MessageCircle, ShieldCheck, MapPin } from 'lucide-react';
 import { Product } from '../types';
 import { useStore } from '../context/StoreContext';
+import { handleImageFallback, resolveImageUrl } from '../utils/images';
 
 interface ProductModalProps {
   product: Product | null;
@@ -18,8 +19,8 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onClose }) 
 
   const images =
     product.images && product.images.length > 0
-      ? product.images
-      : ['/src/assets/images/hero_luxury_cosmetics_1794222186679.jpg'];
+      ? product.images.map((url) => resolveImageUrl(url, product.category))
+      : [resolveImageUrl(undefined, product.category)];
 
   const activeVariant =
     selectedVariant || (product.variants && product.variants.length > 0 ? product.variants[0] : '');
@@ -63,7 +64,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onClose }) 
               <img
                 src={images[selectedImageIdx] || images[0]}
                 alt={product.name}
-                referrerPolicy="no-referrer"
+                onError={(e) => handleImageFallback(e, product.category)}
                 className="w-full h-full object-cover"
               />
             </div>
@@ -81,7 +82,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onClose }) 
                     <img
                       src={imgUrl}
                       alt={`${product.name} view ${idx + 1}`}
-                      referrerPolicy="no-referrer"
+                      onError={(e) => handleImageFallback(e, product.category)}
                       className="w-full h-full object-cover"
                     />
                   </button>

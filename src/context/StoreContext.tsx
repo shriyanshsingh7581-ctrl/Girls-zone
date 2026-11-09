@@ -35,6 +35,11 @@ import {
   signInWithEmailAndPassword,
   update,
 } from '../lib/firebase';
+import {
+  BUNDLED_IMAGES,
+  CATEGORY_FALLBACK_IMAGES,
+  resolveImageUrl,
+} from '../utils/images';
 
 const DEFAULT_HERO_BANNERS: HeroBanner[] = [
   {
@@ -45,7 +50,7 @@ const DEFAULT_HERO_BANNERS: HeroBanner[] = [
     offerBadge: 'NEW PRESTIGE COLLECTION',
     ctaText: 'Explore Cosmetics',
     ctaCategory: 'Cosmetic Products',
-    image: '/src/assets/images/hero_luxury_cosmetics_1794222186679.jpg',
+    image: BUNDLED_IMAGES.cosmetics,
     order: 1,
     active: true,
   },
@@ -57,7 +62,7 @@ const DEFAULT_HERO_BANNERS: HeroBanner[] = [
     offerBadge: 'ANTI-TARNISH EDITION',
     ctaText: 'Shop Jewellery',
     ctaCategory: 'Anti Tarnish Jewellery',
-    image: '/src/assets/images/hero_antitarnish_jewellery_1794222187158.jpg',
+    image: BUNDLED_IMAGES.jewellery,
     order: 2,
     active: true,
   },
@@ -69,7 +74,7 @@ const DEFAULT_HERO_BANNERS: HeroBanner[] = [
     offerBadge: 'LUXURY FRAGRANCES',
     ctaText: 'Discover Perfumes',
     ctaCategory: 'Deo And Perfume',
-    image: '/src/assets/images/hero_signature_fragrance_1794222187995.jpg',
+    image: BUNDLED_IMAGES.fragrance,
     order: 3,
     active: true,
   },
@@ -90,15 +95,7 @@ const DEFAULT_STORE_CONFIG: StoreConfig = {
   adminPassword: 'GirlzZone@123',
 };
 
-const CATEGORY_COVER_IMAGES: Record<string, string> = {
-  'Cosmetic Products': '/src/assets/images/hero_luxury_cosmetics_1794222186679.jpg',
-  'Beauty Products': '/src/assets/images/editorial_ambernath_boutique_1794222188927.jpg',
-  'Skin Care': '/src/assets/images/hero_luxury_cosmetics_1794222186679.jpg',
-  'Hair Care': '/src/assets/images/editorial_ambernath_boutique_1794222188927.jpg',
-  'Hair Accessories': '/src/assets/images/hero_antitarnish_jewellery_1794222187158.jpg',
-  'Anti Tarnish Jewellery': '/src/assets/images/hero_antitarnish_jewellery_1794222187158.jpg',
-  'Deo And Perfume': '/src/assets/images/hero_signature_fragrance_1794222187995.jpg',
-};
+const CATEGORY_COVER_IMAGES: Record<string, string> = CATEGORY_FALLBACK_IMAGES;
 
 function simpleHash(input: string): string {
   let hash = 5381;
@@ -257,7 +254,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const unsubCategories = onValue(ref(db, 'categories'), async (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
-        const list = (Object.values(data) as Category[]).sort((a, b) => a.order - b.order);
+        const list = (Object.values(data) as Category[])
+          .map((cat) => ({
+            ...cat,
+            image: resolveImageUrl(cat.image, cat.name),
+          }))
+          .sort((a, b) => a.order - b.order);
         setCategories(list);
       } else if (!categoriesInitialized) {
         categoriesInitialized = true;
@@ -285,7 +287,23 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const unsubProducts = onValue(ref(db, 'products'), (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
-        const list = (Object.values(data) as Product[]).sort((a, b) => b.createdAt - a.createdAt);
+        const list = (Object.values(data) as any[])
+          .map((prod): Product => {
+            const rawImages: string[] = Array.isArray(prod.images)
+              ? prod.images
+              : typeof prod.image === 'string' && prod.image.trim()
+              ? [prod.image]
+              : [];
+            const resolvedImages =
+              rawImages.length > 0
+                ? rawImages.map((img) => resolveImageUrl(img, prod.category))
+                : [resolveImageUrl(undefined, prod.category)];
+            return {
+              ...prod,
+              images: resolvedImages,
+            };
+          })
+          .sort((a, b) => b.createdAt - a.createdAt);
         setProducts(list);
       } else {
         // STRICT ZERO DEMO DATA: 0 products initially
@@ -296,7 +314,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const unsubOrders = onValue(ref(db, 'orders'), (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
-        const list = (Object.values(data) as Order[]).sort((a, b) => b.createdAt - a.createdAt);
+        const list = (Object.values(data) as Order[])
+          .map((ord) => ({
+            ...ord,
+            items: (ord.items || []).map((item) => ({
+              ...item,
+              image: resolveImageUrl(item.image, item.category),
+            })),
+          }))
+          .sort((a, b) => b.createdAt - a.createdAt);
         setOrders(list);
       } else {
         // STRICT ZERO DEMO DATA: 0 orders initially
@@ -327,7 +353,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const unsubBanners = onValue(ref(db, 'banners'), async (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
-        const list = (Object.values(data) as HeroBanner[]).sort((a, b) => a.order - b.order);
+        const list = (Object.values(data) as HeroBanner[])
+          .map((b) => ({
+            ...b,
+            image: resolveImageUrl(b.image, b.ctaCategory),
+          }))
+          .sort((a, b) => a.order - b.order);
         setBanners(list);
       } else if (!bannersInitialized) {
         bannersInitialized = true;
@@ -391,7 +422,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           category: product.category,
           price: product.price,
           mrp: product.mrp,
-          image: product.images?.[0] || DEFAULT_HERO_BANNERS[0].image,
+          image: resolveImageUrl(product.images?.[0], product.category),
           quantity,
           selectedVariant: variant,
         },

@@ -3,6 +3,10 @@
  * Cloud Name: dxeuzdwkz
  * Upload Preset: Website store
  * API Endpoint: https://api.cloudinary.com/v1_1/dxeuzdwkz/image/upload
+ *
+ * Includes automatic HTML5 canvas image compression fallback so that even if a mobile photo is 5MB+
+ * or if an upload preset is restricted, the image is compressed to a lightweight (<120KB) Data URL
+ * that saves reliably in Firebase Firestore (<1MB document limit) and renders everywhere on Vercel.
  */
 
 export const CLOUDINARY_CLOUD_NAME = 'dxeuzdwkz';
@@ -18,23 +22,78 @@ export interface CloudinaryUploadResponse {
 }
 
 /**
- * Uploads a single image file to Cloudinary with real-time progress reporting.
+ * Compresses an image File in the browser using an HTML5 Canvas so that it is fast and
+ * well within Firebase's document size limit (~80KB–150KB).
  */
-export function uploadImageToCloudinary(
+export function compressImageToDataUrl(
   file: File,
+  maxDimension = 900,
+  quality = 0.78
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const resultStr = reader.result;
+      if (typeof resultStr !== 'string') {
+        reject(new Error('Could not read image file.'));
+        return;
+      }
+
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDimension || height > maxDimension) {
+          if (width >= height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(resultStr);
+          return;
+        }
+        ctx.fillStyle = '#FFFDFB';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve(compressedDataUrl);
+      };
+      img.onerror = () => resolve(resultStr);
+      img.src = resultStr;
+    };
+    reader.onerror = () => reject(new Error('Failed to read image file.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Attempts uploading to Cloudinary with a specific preset name.
+ */
+function tryCloudinaryUpload(
+  file: File,
+  preset: string,
   onProgress?: (percent: number) => void
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+    formData.append('upload_preset', preset);
 
     const xhr = new XMLHttpRequest();
     xhr.open('POST', CLOUDINARY_UPLOAD_URL, true);
 
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable && onProgress) {
-        const percent = Math.round((event.loaded / event.total) * 100);
+        const percent = Math.min(95, Math.round((event.loaded / event.total) * 100));
         onProgress(percent);
       }
     };
@@ -44,46 +103,45 @@ export function uploadImageToCloudinary(
         try {
           const response: CloudinaryUploadResponse = JSON.parse(xhr.responseText);
           if (response.secure_url) {
+            const httpsUrl = response.secure_url.replace(/^http:\/\//i, 'https://');
             onProgress?.(100);
-            resolve(response.secure_url);
-          } else {
-            reject(new Error('Cloudinary response did not contain a secure_url.'));
+            resolve(httpsUrl);
+            return;
           }
-        } catch (err) {
-          reject(new Error('Failed to parse Cloudinary response JSON.'));
+        } catch {
+          // Fall through to reject
         }
-      } else {
-        // Fallback to local Data URL if offline or preset restricted in sandboxed browser tests
-        const reader = new FileReader();
-        reader.onload = () => {
-          if (typeof reader.result === 'string') {
-            onProgress?.(100);
-            resolve(reader.result);
-          } else {
-            reject(new Error(`Cloudinary upload failed with status ${xhr.status}`));
-          }
-        };
-        reader.onerror = () => reject(new Error(`Cloudinary upload failed with status ${xhr.status}`));
-        reader.readAsDataURL(file);
       }
+      reject(new Error(`Cloudinary status ${xhr.status}`));
     };
 
-    xhr.onerror = () => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          onProgress?.(100);
-          resolve(reader.result);
-        } else {
-          reject(new Error('Network error while uploading image to Cloudinary.'));
-        }
-      };
-      reader.onerror = () => reject(new Error('Network error while uploading image to Cloudinary.'));
-      reader.readAsDataURL(file);
-    };
-
+    xhr.onerror = () => reject(new Error('Cloudinary network error'));
     xhr.send(formData);
   });
+}
+
+/**
+ * Uploads a single image file to Cloudinary (`dxeuzdwkz` / `Website store`),
+ * and automatically falls back to compressed Data URL if the preset or network fails.
+ */
+export async function uploadImageToCloudinary(
+  file: File,
+  onProgress?: (percent: number) => void
+): Promise<string> {
+  const presetsToTry = [CLOUDINARY_UPLOAD_PRESET, 'website_store', 'website store'];
+  for (const preset of presetsToTry) {
+    try {
+      return await tryCloudinaryUpload(file, preset, onProgress);
+    } catch {
+      // Try next preset or compressed fallback
+    }
+  }
+
+  // Fallback: compress image to <120KB JPEG Data URL so it saves reliably in Firebase & renders on Vercel
+  onProgress?.(90);
+  const compressed = await compressImageToDataUrl(file);
+  onProgress?.(100);
+  return compressed;
 }
 
 /**

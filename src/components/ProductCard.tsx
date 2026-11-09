@@ -2,6 +2,7 @@ import React from 'react';
 import { Heart, Plus } from 'lucide-react';
 import { Product } from '../types';
 import { useStore } from '../context/StoreContext';
+import { handleImageFallback, resolveImageUrl } from '../utils/images';
 
 interface ProductCardProps {
   product: Product;
@@ -11,10 +12,7 @@ interface ProductCardProps {
 export const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect }) => {
   const { addToCart, wishlist, toggleWishlist, setIsCartOpen } = useStore();
   const isWishlisted = wishlist.includes(product.id);
-  const coverImage =
-    product.images && product.images.length > 0
-      ? product.images[0]
-      : '/src/assets/images/hero_luxury_cosmetics_1794222186679.jpg';
+  const coverImage = resolveImageUrl(product.images?.[0], product.category);
 
   const primaryBadge =
     !product.inStock
@@ -37,7 +35,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect }) =
           <img
             src={coverImage}
             alt={product.name}
-            referrerPolicy="no-referrer"
+            loading="lazy"
+            onError={(e) => handleImageFallback(e, product.category)}
             className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300"
           />
         </button>

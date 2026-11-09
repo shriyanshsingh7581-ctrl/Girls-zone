@@ -18,6 +18,7 @@ import { CartDrawer } from '../components/CartDrawer';
 import { CustomerAuthModal } from '../components/CustomerAuthModal';
 import { OrderTrackerView } from '../components/OrderTrackerView';
 import { Footer } from '../components/Footer';
+import { BUNDLED_IMAGES, handleImageFallback, resolveImageUrl } from '../utils/images';
 
 export const StorefrontPage: React.FC = () => {
   const { categories, products, wishlist, storeConfig } = useStore();
@@ -403,9 +404,9 @@ export const StorefrontPage: React.FC = () => {
 
                 <div className="min-h-[260px] lg:min-h-full bg-[#1E1116]">
                   <img
-                    src="/src/assets/images/editorial_ambernath_boutique_1794222188927.jpg"
+                    src={BUNDLED_IMAGES.boutique}
                     alt="Girlz Zone Ambernath Boutique"
-                    referrerPolicy="no-referrer"
+                    onError={(e) => handleImageFallback(e, 'Beauty Products')}
                     className="w-full h-full object-cover"
                   />
                 </div>

@@ -40,6 +40,7 @@ import {
   calculateDiscountPercent,
   formatDeliveryAddress,
 } from '../utils/commerce';
+import { handleImageFallback, resolveImageUrl } from '../utils/images';
 
 type AdminTab =
   | 'dashboard'
@@ -305,16 +306,21 @@ export const AdminPage: React.FC = () => {
 
   const handleSaveProductSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (uploadProgress !== null) return;
+
     const numPrice = Number(prodPrice) || 0;
     const numMrp = Number(prodMrp) || numPrice;
     const numStock = Number(prodStockQty) || 0;
 
+    const combinedUrls = [
+      ...prodImages,
+      ...(prodImageUrlInput.trim() ? [prodImageUrlInput.trim()] : []),
+    ]
+      .map((u) => resolveImageUrl(u, prodCategory))
+      .filter(Boolean);
+
     const finalImages =
-      prodImages.length > 0
-        ? prodImages
-        : prodImageUrlInput.trim()
-        ? [prodImageUrlInput.trim()]
-        : ['/src/assets/images/hero_luxury_cosmetics_1794222186679.jpg'];
+      combinedUrls.length > 0 ? combinedUrls : [resolveImageUrl(undefined, prodCategory)];
 
     const parsedVariants = prodVariants
       .split(',')
@@ -700,9 +706,9 @@ export const AdminPage: React.FC = () => {
                     className="p-4 rounded-xl bg-[#FFFDFB] border border-[#1E1116]/10 flex gap-4 items-start"
                   >
                     <img
-                      src={prod.images?.[0]}
+                      src={resolveImageUrl(prod.images?.[0], prod.category)}
                       alt={prod.name}
-                      referrerPolicy="no-referrer"
+                      onError={(e) => handleImageFallback(e, prod.category)}
                       className="w-20 h-24 rounded-lg object-cover bg-[#FDF6F6] shrink-0"
                     />
                     <div className="flex-1 min-w-0 space-y-1.5">
@@ -1823,9 +1829,9 @@ export const AdminPage: React.FC = () => {
                     {prodImages.map((url, idx) => (
                       <div key={idx} className="relative w-14 h-14 rounded-lg overflow-hidden shrink-0">
                         <img
-                          src={url}
+                          src={resolveImageUrl(url, prodCategory)}
                           alt={`Upload ${idx + 1}`}
-                          referrerPolicy="no-referrer"
+                          onError={(e) => handleImageFallback(e, prodCategory)}
                           className="w-full h-full object-cover"
                         />
                         <button
@@ -1909,9 +1915,18 @@ export const AdminPage: React.FC = () => {
 
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-[#1E1116] hover:bg-[#C89D7C] text-[#FFFDFB] hover:text-[#1E1116] text-xs font-semibold transition-colors cursor-pointer"
+                  disabled={uploadProgress !== null}
+                  className={`px-6 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+                    uploadProgress !== null
+                      ? 'bg-[#1E1116]/40 text-[#FFFDFB] cursor-wait'
+                      : 'bg-[#1E1116] hover:bg-[#C89D7C] text-[#FFFDFB] hover:text-[#1E1116]'
+                  }`}
                 >
-                  {editingProductId ? 'Save Product Changes' : 'Publish Product Live'}
+                  {uploadProgress !== null
+                    ? `Uploading Photo (${uploadProgress}%)...`
+                    : editingProductId
+                    ? 'Save Product Changes'
+                    : 'Publish Product Live'}
                 </button>
               </div>
             </form>
