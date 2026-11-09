@@ -1,6 +1,8 @@
 import { initializeApp } from 'firebase/app';
 import {
   getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
@@ -241,6 +243,8 @@ export async function getOnce(reference: DbReference): Promise<{ val: () => any;
 }
 
 export {
+  GoogleAuthProvider,
+  signInWithPopup,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   firebaseSignOut,

@@ -21,6 +21,11 @@ import {
   ExternalLink,
   Eye,
   EyeOff,
+  Palette,
+  Sparkles,
+  ArrowUp,
+  ArrowDown,
+  RotateCcw,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
@@ -33,17 +38,26 @@ import {
   OrderStatus,
   Product,
   ProductBadge,
+  StoreTemplateId,
 } from '../types';
 import { uploadMultipleImagesToCloudinary, uploadImageToCloudinary } from '../lib/cloudinary';
 import {
+  STORE_TEMPLATES,
+  THEME_PRESETS,
   buildAdminTrackingWhatsAppUrl,
   calculateDiscountPercent,
   formatDeliveryAddress,
 } from '../utils/commerce';
-import { handleImageFallback, resolveImageUrl } from '../utils/images';
+import {
+  CATEGORY_IMAGE_PRESETS,
+  getFallbackImageForCategory,
+  handleImageFallback,
+  resolveImageUrl,
+} from '../utils/images';
 
 type AdminTab =
   | 'dashboard'
+  | 'themes_messages'
   | 'orders'
   | 'products'
   | 'categories'
@@ -79,6 +93,7 @@ export const AdminPage: React.FC = () => {
     storeConfig,
     isAdminAuthenticated,
     loginAdmin,
+    loginAdminWithGoogle,
     logoutAdmin,
     saveProduct,
     deleteProduct,
@@ -87,6 +102,8 @@ export const AdminPage: React.FC = () => {
     updateOrderStatus,
     saveCategory,
     deleteCategory,
+    reorderCategory,
+    restoreDefaultCategories,
     saveBanner,
     deleteBanner,
     saveCoupon,
@@ -136,6 +153,11 @@ export const AdminPage: React.FC = () => {
   const [catOrder, setCatOrder] = useState('1');
   const [catVisible, setCatVisible] = useState(true);
   const [catUploadProgress, setCatUploadProgress] = useState<number | null>(null);
+  const [catSavedMsg, setCatSavedMsg] = useState('');
+
+  // Quick Inline Category Creator inside Add Product Modal
+  const [isQuickCatOpen, setIsQuickCatOpen] = useState(false);
+  const [quickCatName, setQuickCatName] = useState('');
 
   // Banner Form State
   const [editingBannerId, setEditingBannerId] = useState<string | undefined>(undefined);
@@ -150,11 +172,13 @@ export const AdminPage: React.FC = () => {
   const [bannerUploadProgress, setBannerUploadProgress] = useState<number | null>(null);
 
   // Coupon Form State
+  const [editingCouponId, setEditingCouponId] = useState<string | undefined>(undefined);
   const [couponCode, setCouponCode] = useState('');
   const [couponType, setCouponType] = useState<'PERCENT' | 'FLAT'>('PERCENT');
   const [couponValue, setCouponValue] = useState('10');
-  const [couponMinOrder, setCouponMinOrder] = useState('499');
+  const [couponMinOrder, setCouponMinOrder] = useState('0');
   const [couponDesc, setCouponDesc] = useState('');
+  const [couponSavedMsg, setCouponSavedMsg] = useState('');
 
   // Settings Form State
   const [settingsSavedMsg, setSettingsSavedMsg] = useState('');
@@ -192,6 +216,40 @@ export const AdminPage: React.FC = () => {
               {loginError}
             </div>
           )}
+
+          {/* 1-Click Google / Gmail Admin Login */}
+          <button
+            type="button"
+            onClick={async () => {
+              setLoginError('');
+              try {
+                await loginAdminWithGoogle();
+              } catch {
+                setLoginError('Google sign-in popup closed. You can also sign in below.');
+              }
+            }}
+            className="w-full py-3 px-4 rounded-xl bg-white hover:bg-[#FDF6F6] text-[#1E1116] border-2 border-[#1E1116]/15 hover:border-[#C89D7C] text-xs sm:text-sm font-semibold flex items-center justify-center gap-2.5 transition-all cursor-pointer"
+          >
+            <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="#4285F4"
+                d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"
+              />
+              <path
+                fill="#34A853"
+                d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24z"
+              />
+              <path
+                fill="#FBBC05"
+                d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14z"
+              />
+              <path
+                fill="#EA4335"
+                d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96z"
+              />
+            </svg>
+            <span>Continue with Google / Gmail</span>
+          </button>
 
           <form onSubmit={handleAdminLogin} className="space-y-4">
             <div>
@@ -383,25 +441,30 @@ export const AdminPage: React.FC = () => {
             {[
               { id: 'dashboard', label: '1. Live Analytics', icon: LayoutDashboard },
               {
+                id: 'themes_messages',
+                label: '2. Themes, 4 Templates & Messages',
+                icon: Palette,
+              },
+              {
                 id: 'orders',
-                label: `2. Orders & Tracking (${orders.length})`,
+                label: `3. Orders & Tracking (${orders.length})`,
                 icon: Package,
               },
               {
                 id: 'products',
-                label: `3. Product Catalog (${products.length})`,
+                label: `4. Product Catalog (${products.length})`,
                 icon: ShoppingBag,
               },
               {
                 id: 'categories',
-                label: `4. Categories (${categories.length})`,
+                label: `5. Categories (${categories.length})`,
                 icon: Layers,
               },
-              { id: 'banners', label: '5. Banners & Flash Sale', icon: ImageIcon },
-              { id: 'coupons', label: `6. Promo Coupons (${coupons.length})`, icon: Tag },
+              { id: 'banners', label: '6. Banners & Flash Sale', icon: ImageIcon },
+              { id: 'coupons', label: `7. Promo Coupons (${coupons.length})`, icon: Tag },
               {
                 id: 'settings',
-                label: `7. Customers & Settings`,
+                label: `8. Customers & Settings`,
                 icon: Settings,
               },
             ].map((item) => {
@@ -451,17 +514,32 @@ export const AdminPage: React.FC = () => {
           <p className="text-[10px] text-[#D4AF37] uppercase tracking-widest">Admin App</p>
           <h1 className="text-lg font-serif-luxury font-bold">Girlz Zone Control</h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => {
+              setEditingCatId(undefined);
+              setCatName('');
+              setCatImage('');
+              setCatOrder(String(categories.length + 1));
+              setCatVisible(true);
+              setActiveTab('categories');
+            }}
+            className="px-2.5 py-1.5 rounded-lg border border-[#C89D7C] text-[#D4AF37] text-[11px] font-semibold flex items-center gap-1"
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>+ Category</span>
+          </button>
           <button
             type="button"
             onClick={() => {
               setActiveTab('products');
               openAddProductModal();
             }}
-            className="px-3 py-1.5 rounded-lg bg-[#C89D7C] text-[#1E1116] text-xs font-semibold flex items-center gap-1"
+            className="px-2.5 py-1.5 rounded-lg bg-[#C89D7C] text-[#1E1116] text-[11px] font-semibold flex items-center gap-1"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Add Product</span>
+            <span>+ Product</span>
           </button>
           <Link
             to="/"
@@ -480,9 +558,12 @@ export const AdminPage: React.FC = () => {
           <div>
             <h2 className="text-2xl font-serif-luxury font-bold text-[#1E1116]">
               {activeTab === 'dashboard' && 'Live Store Analytics & Overview'}
+              {activeTab === 'themes_messages' &&
+                'Website Color Themes, 4 Luxury Templates & Full Message Control'}
               {activeTab === 'orders' && 'Flipkart Order & Live Tracking Controller'}
               {activeTab === 'products' && 'Product Catalog Manager (Cloudinary Sync)'}
-              {activeTab === 'categories' && 'Store Category Manager'}
+              {activeTab === 'categories' &&
+                'Store Category Studio — Add, Reorder & Optimize Website Categories'}
               {activeTab === 'banners' && 'Hero Banners, Announcement Bar & Flash Sale'}
               {activeTab === 'coupons' && 'Coupons & Promo Codes Manager'}
               {activeTab === 'settings' && 'Registered Customers & Store Settings'}
@@ -492,7 +573,49 @@ export const AdminPage: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              data-testid="top-delivery-status-btn"
+              onClick={() => setActiveTab('orders')}
+              className="px-3 py-2.5 rounded-xl border border-[#1E1116]/20 bg-[#FFFDFB] hover:border-[#C89D7C] text-[#1E1116] text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Package className="w-4 h-4 text-[#C89D7C]" />
+              <span>Delivery Status ({orders.length})</span>
+            </button>
+            <button
+              type="button"
+              data-testid="top-promo-code-btn"
+              onClick={() => setActiveTab('coupons')}
+              className="px-3 py-2.5 rounded-xl border border-[#1E1116]/20 bg-[#FFFDFB] hover:border-[#C89D7C] text-[#1E1116] text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Tag className="w-4 h-4 text-[#C89D7C]" />
+              <span>+ Promo Code ({coupons.length})</span>
+            </button>
+            <button
+              type="button"
+              data-testid="top-add-category-btn"
+              onClick={() => {
+                setEditingCatId(undefined);
+                setCatName('');
+                setCatImage('');
+                setCatOrder(String(categories.length + 1));
+                setCatVisible(true);
+                setActiveTab('categories');
+              }}
+              className="px-3 py-2.5 rounded-xl border border-[#1E1116]/20 bg-[#FFFDFB] hover:border-[#C89D7C] hover:bg-[#FDF6F6] text-[#1E1116] text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Layers className="w-4 h-4 text-[#C89D7C]" />
+              <span>+ Add Category</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('themes_messages')}
+              className="px-3 py-2.5 rounded-xl border border-[#C89D7C] bg-[#FDF6F6] hover:bg-[#C89D7C] text-[#1E1116] text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Palette className="w-4 h-4 text-[#C89D7C]" />
+              <span>4 Templates & Colors</span>
+            </button>
             <button
               type="button"
               onClick={() => {
@@ -502,10 +625,563 @@ export const AdminPage: React.FC = () => {
               className="px-4 py-2.5 rounded-xl bg-[#1E1116] hover:bg-[#C89D7C] text-[#FFFDFB] hover:text-[#1E1116] text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <Plus className="w-4 h-4" />
-              <span>+ Add New Product</span>
+              <span>+ Add Product</span>
             </button>
           </div>
         </div>
+
+        {/* MODULE: WEBSITE COLOR THEMES, 4 TEMPLATES & FULL MESSAGE STUDIO */}
+        {activeTab === 'themes_messages' && (
+          <div className="space-y-8">
+            {settingsSavedMsg && (
+              <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
+                <Check className="w-4 h-4" />
+                <span>{settingsSavedMsg}</span>
+              </div>
+            )}
+
+            {/* SECTION 1: 4 PREMIUM STOREFRONT TEMPLATES (MOBILE + DESKTOP OPTIMIZED) */}
+            <div className="p-5 sm:p-6 rounded-2xl bg-[#FDF6F6] border border-[#C89D7C]/35 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-[#C89D7C]">
+                    1-Click Storefront Design Switcher
+                  </p>
+                  <h3 className="text-xl font-serif-luxury font-bold text-[#1E1116]">
+                    Choose From 4 Premium Templates (Mobile & Desktop Optimized)
+                  </h3>
+                </div>
+                <span className="px-3 py-1 rounded-full bg-[#1E1116] text-[#D4AF37] text-xs font-semibold">
+                  Active:{' '}
+                  {STORE_TEMPLATES.find((t) => t.id === (storeConfig.activeTemplate || 'prestige'))
+                    ?.name || 'Prestige Editorial Classic'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {STORE_TEMPLATES.map((tpl) => {
+                  const isCurrent = (storeConfig.activeTemplate || 'prestige') === tpl.id;
+                  return (
+                    <div
+                      key={tpl.id}
+                      data-testid={`template-card-${tpl.id}`}
+                      className={`p-5 rounded-2xl border-2 transition-all flex flex-col justify-between gap-4 ${
+                        isCurrent
+                          ? 'bg-[#FFFDFB] border-[#1E1116] shadow-md'
+                          : 'bg-[#FFFDFB]/80 border-[#1E1116]/12 hover:border-[#C89D7C]'
+                      }`}
+                    >
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="px-2.5 py-0.5 rounded bg-[#FDF6F6] border border-[#C89D7C]/40 text-[10px] font-bold uppercase tracking-wider text-[#C89D7C]">
+                            {tpl.badge}
+                          </span>
+                          {isCurrent && (
+                            <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700">
+                              <Check className="w-3.5 h-3.5" /> Active Live
+                            </span>
+                          )}
+                        </div>
+                        <h4 className="text-lg font-serif-luxury font-bold text-[#1E1116]">
+                          {tpl.name}
+                        </h4>
+                        <p className="text-xs text-[#1E1116]/70 leading-relaxed">
+                          {tpl.subtitle}
+                        </p>
+                        <div className="pt-2 space-y-1 text-[11px] text-[#1E1116]/75 border-t border-[#1E1116]/8">
+                          <p>
+                            <strong>Mobile View:</strong> {tpl.mobileFeatures}
+                          </p>
+                          <p>
+                            <strong>Desktop View:</strong> {tpl.desktopFeatures}
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        data-testid={`activate-template-${tpl.id}`}
+                        onClick={async () => {
+                          await updateStoreConfig({ activeTemplate: tpl.id as StoreTemplateId });
+                          setSettingsSavedMsg(`Template switched live to "${tpl.name}"!`);
+                          setTimeout(() => setSettingsSavedMsg(''), 3000);
+                        }}
+                        className={`w-full py-2.5 px-4 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+                          isCurrent
+                            ? 'bg-emerald-700 text-white'
+                            : 'bg-[#1E1116] hover:bg-[#C89D7C] text-[#FFFDFB] hover:text-[#1E1116]'
+                        }`}
+                      >
+                        {isCurrent ? '✓ Currently Active Template' : `Activate "${tpl.name}"`}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* SECTION 2: GLOBAL WEBSITE COLOR THEME STUDIO */}
+            <div className="p-5 sm:p-6 rounded-2xl bg-[#FFFDFB] border border-[#1E1116]/12 space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-[#C89D7C]">
+                    Live Brand Palette Controller
+                  </p>
+                  <h3 className="text-xl font-serif-luxury font-bold text-[#1E1116]">
+                    Full Website Color Theme Presets & Custom Color Pickers
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  data-testid="reset-default-colors-btn"
+                  onClick={async () => {
+                    const def = THEME_PRESETS[0];
+                    await updateStoreConfig({
+                      themePreset: def.id,
+                      themeBgPrimary: def.bgPrimary,
+                      themeBgSecondary: def.bgSecondary,
+                      themeTextPrimary: def.textPrimary,
+                      themeAccentPrimary: def.accentPrimary,
+                      themeAccentSecondary: def.accentSecondary,
+                    });
+                    setSettingsSavedMsg('Reset to default Rose Gold & Soft Pearl color theme!');
+                    setTimeout(() => setSettingsSavedMsg(''), 3000);
+                  }}
+                  className="px-3 py-1.5 rounded-lg border border-[#1E1116]/20 text-xs font-semibold hover:bg-[#FDF6F6] cursor-pointer"
+                >
+                  Reset Default Colors
+                </button>
+              </div>
+
+              {/* 6 Curated Color Theme Presets */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                {THEME_PRESETS.map((preset) => {
+                  const isSelected = storeConfig.themePreset === preset.id;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      data-testid={`theme-preset-${preset.id}`}
+                      onClick={async () => {
+                        await updateStoreConfig({
+                          themePreset: preset.id,
+                          themeBgPrimary: preset.bgPrimary,
+                          themeBgSecondary: preset.bgSecondary,
+                          themeTextPrimary: preset.textPrimary,
+                          themeAccentPrimary: preset.accentPrimary,
+                          themeAccentSecondary: preset.accentSecondary,
+                        });
+                        setSettingsSavedMsg(`Applied "${preset.name}" color theme across the website!`);
+                        setTimeout(() => setSettingsSavedMsg(''), 3000);
+                      }}
+                      className={`p-4 rounded-xl border-2 text-left transition-all cursor-pointer space-y-2.5 ${
+                        isSelected
+                          ? 'border-[#1E1116] bg-[#FDF6F6] shadow-sm'
+                          : 'border-[#1E1116]/12 bg-[#FFFDFB] hover:border-[#C89D7C]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-[#1E1116]">{preset.name}</span>
+                        {isSelected && (
+                          <span className="text-[10px] font-bold text-emerald-700">Active</span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-[#1E1116]/65">{preset.description}</p>
+                      <div className="flex items-center gap-2 pt-1">
+                        {[
+                          preset.bgPrimary,
+                          preset.bgSecondary,
+                          preset.textPrimary,
+                          preset.accentPrimary,
+                          preset.accentSecondary,
+                        ].map((hex, i) => (
+                          <span
+                            key={i}
+                            className="w-6 h-6 rounded-full border border-black/15 shadow-2xs"
+                            style={{ backgroundColor: hex }}
+                            title={hex}
+                          />
+                        ))}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* 5 Custom Live Color Pickers */}
+              <div className="pt-4 border-t border-[#1E1116]/10 space-y-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-[#1E1116]">
+                  Custom Color Pickers (Fine-Tune Any Website Color)
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                  {[
+                    {
+                      label: 'Main Page Background',
+                      key: 'themeBgPrimary' as const,
+                      val: storeConfig.themeBgPrimary || '#FFFDFB',
+                    },
+                    {
+                      label: 'Card & Section Surface',
+                      key: 'themeBgSecondary' as const,
+                      val: storeConfig.themeBgSecondary || '#FDF6F6',
+                    },
+                    {
+                      label: 'Primary Text & Buttons',
+                      key: 'themeTextPrimary' as const,
+                      val: storeConfig.themeTextPrimary || '#1E1116',
+                    },
+                    {
+                      label: 'Primary Brand Accent',
+                      key: 'themeAccentPrimary' as const,
+                      val: storeConfig.themeAccentPrimary || '#C89D7C',
+                    },
+                    {
+                      label: 'Secondary Gold Highlight',
+                      key: 'themeAccentSecondary' as const,
+                      val: storeConfig.themeAccentSecondary || '#D4AF37',
+                    },
+                  ].map((item) => (
+                    <div
+                      key={item.key}
+                      className="p-3 rounded-xl bg-[#FDF6F6] border border-[#1E1116]/10 space-y-1.5"
+                    >
+                      <label className="block text-[11px] font-semibold text-[#1E1116]">
+                        {item.label}
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={item.val}
+                          onChange={(e) =>
+                            updateStoreConfig({
+                              themePreset: 'custom',
+                              [item.key]: e.target.value,
+                            })
+                          }
+                          className="w-9 h-9 rounded cursor-pointer border border-[#1E1116]/20 bg-transparent"
+                        />
+                        <input
+                          type="text"
+                          value={item.val}
+                          onChange={(e) =>
+                            updateStoreConfig({
+                              themePreset: 'custom',
+                              [item.key]: e.target.value,
+                            })
+                          }
+                          className="w-full px-2.5 py-1.5 text-xs font-mono-num bg-[#FFFDFB] border border-[#1E1116]/15 rounded-lg"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* SECTION 3: FULL WEBSITE & WHATSAPP MESSAGE CONTROL CENTER */}
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                await updateStoreConfig(storeConfig);
+                setSettingsSavedMsg('All website & WhatsApp messages saved live!');
+                setTimeout(() => setSettingsSavedMsg(''), 3000);
+              }}
+              className="p-5 sm:p-6 rounded-2xl bg-[#FDF6F6] border border-[#C89D7C]/35 space-y-5"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-[#C89D7C]">
+                    Complete Copy & WhatsApp Automation Control
+                  </p>
+                  <h3 className="text-xl font-serif-luxury font-bold text-[#1E1116]">
+                    Full Website & WhatsApp Message Control Center
+                  </h3>
+                </div>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-[#1E1116] hover:bg-[#C89D7C] text-[#FFFDFB] hover:text-[#1E1116] text-xs font-semibold cursor-pointer"
+                >
+                  Save All Messages Live
+                </button>
+              </div>
+
+              {/* 3A: Top Announcement, Welcome Notice & Flash Sale Messages */}
+              <div className="p-4 rounded-xl bg-[#FFFDFB] border border-[#1E1116]/10 space-y-4">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-[#C89D7C]">
+                  A. Top Announcement Bar, Welcome Banner & Flash Sale Messages
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-semibold mb-1">
+                      Top Scrolling Announcement Bar Message
+                    </label>
+                    <input
+                      type="text"
+                      value={storeConfig.announcementText}
+                      onChange={(e) => updateStoreConfig({ announcementText: e.target.value })}
+                      className="w-full px-3 py-2 text-xs bg-[#FDF6F6] border border-[#1E1116]/15 rounded-lg"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-semibold">
+                        Custom Welcome / Store Notice Banner
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs font-semibold text-[#C89D7C] cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(storeConfig.welcomeBannerActive)}
+                          onChange={(e) =>
+                            updateStoreConfig({ welcomeBannerActive: e.target.checked })
+                          }
+                        />
+                        <span>Show on Homepage</span>
+                      </label>
+                    </div>
+                    <input
+                      type="text"
+                      value={storeConfig.welcomeBannerText || ''}
+                      onChange={(e) => updateStoreConfig({ welcomeBannerText: e.target.value })}
+                      placeholder="Special notice or festival greeting..."
+                      className="w-full px-3 py-2 text-xs bg-[#FDF6F6] border border-[#1E1116]/15 rounded-lg"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-semibold">Flash Sale Highlight Message</label>
+                      <label className="flex items-center gap-1.5 text-xs font-semibold text-[#C89D7C] cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(storeConfig.flashSaleActive)}
+                          onChange={(e) =>
+                            updateStoreConfig({ flashSaleActive: e.target.checked })
+                          }
+                        />
+                        <span>Show Flash Sale</span>
+                      </label>
+                    </div>
+                    <input
+                      type="text"
+                      value={storeConfig.flashSaleTitle}
+                      onChange={(e) => updateStoreConfig({ flashSaleTitle: e.target.value })}
+                      className="w-full px-3 py-2 text-xs bg-[#FDF6F6] border border-[#1E1116]/15 rounded-lg"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 3B: Storefront Headlines, Empty State & Boutique Section Messages */}
+              <div className="p-4 rounded-xl bg-[#FFFDFB] border border-[#1E1116]/10 space-y-4">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-[#C89D7C]">
+                  B. Storefront Section Headlines, Empty Catalog & Footer Messages
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">
+                      Catalog Section Kicker (Small Top Label)
+                    </label>
+                    <input
+                      type="text"
+                      value={storeConfig.catalogSectionKicker || ''}
+                      onChange={(e) =>
+                        updateStoreConfig({ catalogSectionKicker: e.target.value })
+                      }
+                      className="w-full px-3 py-2 text-xs bg-[#FDF6F6] border border-[#1E1116]/15 rounded-lg"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">
+                      Catalog Section Main Heading
+                    </label>
+                    <input
+                      type="text"
+                      value={storeConfig.catalogSectionTitle || ''}
+                      onChange={(e) => updateStoreConfig({ catalogSectionTitle: e.target.value })}
+                      className="w-full px-3 py-2 text-xs bg-[#FDF6F6] border border-[#1E1116]/15 rounded-lg"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">
+                      Empty Catalog Launch Title (When 0 Products)
+                    </label>
+                    <input
+                      type="text"
+                      value={storeConfig.emptyCatalogTitle || ''}
+                      onChange={(e) => updateStoreConfig({ emptyCatalogTitle: e.target.value })}
+                      className="w-full px-3 py-2 text-xs bg-[#FDF6F6] border border-[#1E1116]/15 rounded-lg"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">
+                      Empty Catalog Launch Subtitle
+                    </label>
+                    <input
+                      type="text"
+                      value={storeConfig.emptyCatalogSubtitle || ''}
+                      onChange={(e) =>
+                        updateStoreConfig({ emptyCatalogSubtitle: e.target.value })
+                      }
+                      className="w-full px-3 py-2 text-xs bg-[#FDF6F6] border border-[#1E1116]/15 rounded-lg"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">
+                      Ambernath Boutique Section Title
+                    </label>
+                    <input
+                      type="text"
+                      value={storeConfig.boutiqueSectionTitle || ''}
+                      onChange={(e) =>
+                        updateStoreConfig({ boutiqueSectionTitle: e.target.value })
+                      }
+                      className="w-full px-3 py-2 text-xs bg-[#FDF6F6] border border-[#1E1116]/15 rounded-lg"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">
+                      Ambernath Boutique Section Description
+                    </label>
+                    <input
+                      type="text"
+                      value={storeConfig.boutiqueSectionSubtitle || ''}
+                      onChange={(e) =>
+                        updateStoreConfig({ boutiqueSectionSubtitle: e.target.value })
+                      }
+                      className="w-full px-3 py-2 text-xs bg-[#FDF6F6] border border-[#1E1116]/15 rounded-lg"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">
+                      Footer Brand Description Tagline
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={storeConfig.footerTagline || ''}
+                      onChange={(e) => updateStoreConfig({ footerTagline: e.target.value })}
+                      className="w-full px-3 py-2 text-xs bg-[#FDF6F6] border border-[#1E1116]/15 rounded-lg"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">
+                      Checkout Order Confirmation Popup Message
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={storeConfig.orderConfirmationMessage || ''}
+                      onChange={(e) =>
+                        updateStoreConfig({ orderConfirmationMessage: e.target.value })
+                      }
+                      className="w-full px-3 py-2 text-xs bg-[#FDF6F6] border border-[#1E1116]/15 rounded-lg"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 3C: WhatsApp Automated Message Templates */}
+              <div className="p-4 rounded-xl bg-[#FFFDFB] border border-[#1E1116]/10 space-y-4">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-[#C89D7C]">
+                  C. WhatsApp Automated Message Templates (Orders, Inquiries & Live Tracking)
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">
+                      General WhatsApp Inquiry Message
+                    </label>
+                    <input
+                      type="text"
+                      value={storeConfig.whatsappGeneralInquiryMessage || ''}
+                      onChange={(e) =>
+                        updateStoreConfig({ whatsappGeneralInquiryMessage: e.target.value })
+                      }
+                      className="w-full px-3 py-2 text-xs bg-[#FDF6F6] border border-[#1E1116]/15 rounded-lg"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">
+                      Product Inquiry Template (Placeholders: {'{productName}'}, {'{price}'},{' '}
+                      {'{category}'})
+                    </label>
+                    <input
+                      type="text"
+                      value={storeConfig.whatsappProductInquiryTemplate || ''}
+                      onChange={(e) =>
+                        updateStoreConfig({ whatsappProductInquiryTemplate: e.target.value })
+                      }
+                      className="w-full px-3 py-2 text-xs bg-[#FDF6F6] border border-[#1E1116]/15 rounded-lg"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">
+                      WhatsApp Order Invoice Header Line
+                    </label>
+                    <input
+                      type="text"
+                      value={storeConfig.whatsappOrderInvoiceHeader || ''}
+                      onChange={(e) =>
+                        updateStoreConfig({ whatsappOrderInvoiceHeader: e.target.value })
+                      }
+                      className="w-full px-3 py-2 text-xs bg-[#FDF6F6] border border-[#1E1116]/15 rounded-lg"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">
+                      WhatsApp Order Invoice Footer Closing Line
+                    </label>
+                    <input
+                      type="text"
+                      value={storeConfig.whatsappOrderInvoiceFooter || ''}
+                      onChange={(e) =>
+                        updateStoreConfig({ whatsappOrderInvoiceFooter: e.target.value })
+                      }
+                      className="w-full px-3 py-2 text-xs bg-[#FDF6F6] border border-[#1E1116]/15 rounded-lg"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">
+                      Admin WhatsApp Tracking Update Intro ({'{customerName}'}, {'{orderId}'},{' '}
+                      {'{status}'})
+                    </label>
+                    <input
+                      type="text"
+                      value={storeConfig.whatsappTrackingUpdateIntro || ''}
+                      onChange={(e) =>
+                        updateStoreConfig({ whatsappTrackingUpdateIntro: e.target.value })
+                      }
+                      className="w-full px-3 py-2 text-xs bg-[#FDF6F6] border border-[#1E1116]/15 rounded-lg"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">
+                      Admin WhatsApp Tracking Update Outro Closing
+                    </label>
+                    <input
+                      type="text"
+                      value={storeConfig.whatsappTrackingUpdateOutro || ''}
+                      onChange={(e) =>
+                        updateStoreConfig({ whatsappTrackingUpdateOutro: e.target.value })
+                      }
+                      className="w-full px-3 py-2 text-xs bg-[#FDF6F6] border border-[#1E1116]/15 rounded-lg"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-3 rounded-xl bg-[#1E1116] hover:bg-[#C89D7C] text-[#FFFDFB] hover:text-[#1E1116] text-xs sm:text-sm font-semibold transition-colors cursor-pointer"
+              >
+                Save All Theme, Template & Message Settings
+              </button>
+            </form>
+          </div>
+        )}
 
         {/* MODULE 1: LIVE ANALYTICS DASHBOARD */}
         {activeTab === 'dashboard' && (
@@ -570,37 +1246,86 @@ export const AdminPage: React.FC = () => {
 
                 {orders.length === 0 ? (
                   <p className="text-xs text-[#1E1116]/60 py-6 text-center">
-                    No orders placed yet. Incoming orders will appear here live.
+                    No orders placed yet. Incoming orders will appear here live with direct 1-click Delivery Status controls.
                   </p>
                 ) : (
-                  <div className="space-y-2.5">
+                  <div className="space-y-3">
                     {orders.slice(0, 5).map((ord) => (
                       <div
                         key={ord.id}
-                        className="p-3 rounded-xl bg-[#FDF6F6] flex items-center justify-between gap-3 text-xs"
+                        className="p-3.5 rounded-xl bg-[#FDF6F6] border border-[#C89D7C]/25 space-y-2.5 text-xs"
                       >
-                        <div>
-                          <p className="font-mono-num font-bold text-[#1E1116]">
-                            {ord.orderNumber} · {ord.customerName}
-                          </p>
-                          <p className="text-[11px] text-[#1E1116]/60">
-                            {ord.items.length} items · ₹{ord.totalAmount}
-                          </p>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <p className="font-mono-num font-bold text-[#1E1116]">
+                              {ord.orderNumber} · {ord.customerName} (+91 {ord.customerPhone})
+                            </p>
+                            <p className="text-[11px] text-[#1E1116]/60">
+                              {ord.items.length} items · ₹{ord.totalAmount} · {ord.deliveryMode}
+                            </p>
+                          </div>
+
+                          {/* Direct Outside Delivery Status Dropdown */}
+                          <select
+                            aria-label={`Change delivery status for ${ord.orderNumber}`}
+                            value={ord.status}
+                            onChange={(e) =>
+                              updateOrderStatus({
+                                order: ord,
+                                newStatus: e.target.value as OrderStatus,
+                              })
+                            }
+                            className="px-3 py-1.5 rounded-lg bg-[#1E1116] text-[#FFFDFB] text-xs font-semibold cursor-pointer"
+                          >
+                            {ALL_ORDER_STATUSES.map((st) => (
+                              <option key={st} value={st}>
+                                {st}
+                              </option>
+                            ))}
+                          </select>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedOrderForEdit(ord);
-                            setEditCourierName(ord.courierName || '');
-                            setEditTrackingId(ord.trackingId || '');
-                            setEditExpectedDate(ord.expectedDeliveryDate || '');
-                            setEditTrackingNote(ord.trackingNote || '');
-                            setActiveTab('orders');
-                          }}
-                          className="px-3 py-1.5 rounded-lg bg-[#1E1116] text-[#FFFDFB] font-semibold cursor-pointer"
-                        >
-                          {ord.status}
-                        </button>
+
+                        {/* Quick 1-Tap Delivery Status Progression Pills */}
+                        <div className="flex flex-wrap items-center gap-1 pt-1 border-t border-[#1E1116]/8">
+                          {ALL_ORDER_STATUSES.map((st) => {
+                            const isCurrent = ord.status === st;
+                            return (
+                              <button
+                                key={st}
+                                type="button"
+                                onClick={() =>
+                                  updateOrderStatus({
+                                    order: ord,
+                                    newStatus: st,
+                                  })
+                                }
+                                className={`px-2 py-1 rounded text-[10px] font-semibold cursor-pointer ${
+                                  isCurrent
+                                    ? st === 'Cancelled'
+                                      ? 'bg-red-600 text-white'
+                                      : 'bg-emerald-700 text-white'
+                                    : 'bg-[#FFFDFB] text-[#1E1116]/75 border border-[#1E1116]/12 hover:border-[#C89D7C]'
+                                }`}
+                              >
+                                {st}
+                              </button>
+                            );
+                          })}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedOrderForEdit(ord);
+                              setEditCourierName(ord.courierName || '');
+                              setEditTrackingId(ord.trackingId || '');
+                              setEditExpectedDate(ord.expectedDeliveryDate || '');
+                              setEditTrackingNote(ord.trackingNote || '');
+                              setActiveTab('orders');
+                            }}
+                            className="ml-auto text-[11px] font-semibold text-[#C89D7C] underline cursor-pointer"
+                          >
+                            Edit Courier / AWB
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -860,7 +1585,11 @@ export const AdminPage: React.FC = () => {
                           </a>
 
                           <a
-                            href={buildAdminTrackingWhatsAppUrl(ord)}
+                            href={buildAdminTrackingWhatsAppUrl(
+                              ord,
+                              storeConfig.whatsappTrackingUpdateIntro,
+                              storeConfig.whatsappTrackingUpdateOutro
+                            )}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-700 text-white text-xs font-semibold hover:bg-emerald-800"
@@ -1005,177 +1734,391 @@ export const AdminPage: React.FC = () => {
           </div>
         )}
 
-        {/* MODULE 4: CATEGORY MANAGER */}
+        {/* MODULE 4: CATEGORY STUDIO — ADD, PREVIEW, REORDER & MANAGE WEBSITE CATEGORIES */}
         {activeTab === 'categories' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                if (!catName.trim()) return;
-                await saveCategory(
-                  {
-                    name: catName.trim(),
-                    image: catImage,
-                    order: Number(catOrder) || categories.length + 1,
-                    visible: catVisible,
-                  },
-                  editingCatId
-                );
-                setEditingCatId(undefined);
-                setCatName('');
-                setCatImage('');
-                setCatOrder(String(categories.length + 1));
-              }}
-              className="p-5 rounded-2xl bg-[#FDF6F6] border border-[#C89D7C]/30 space-y-3 h-fit"
-            >
-              <h3 className="text-base font-serif-luxury font-bold text-[#1E1116]">
-                {editingCatId ? 'Edit Category' : 'Add Store Category'}
-              </h3>
-
-              <div>
-                <label className="block text-xs font-semibold mb-1">Category Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={catName}
-                  onChange={(e) => setCatName(e.target.value)}
-                  placeholder="e.g. Cosmetic Products"
-                  className="w-full px-3 py-2 text-xs bg-[#FFFDFB] border border-[#1E1116]/15 rounded-lg"
-                />
+          <div className="space-y-6">
+            {catSavedMsg && (
+              <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
+                <Check className="w-4 h-4" />
+                <span>{catSavedMsg}</span>
               </div>
+            )}
 
-              <div>
-                <label className="block text-xs font-semibold mb-1">
-                  Category Cover Image (Cloudinary or URL)
-                </label>
-                <input
-                  type="text"
-                  value={catImage}
-                  onChange={(e) => setCatImage(e.target.value)}
-                  placeholder="https://..."
-                  className="w-full px-3 py-2 text-xs bg-[#FFFDFB] border border-[#1E1116]/15 rounded-lg mb-2"
-                />
-                <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1E1116] text-[#FFFDFB] text-xs font-semibold cursor-pointer">
-                  <Upload className="w-3.5 h-3.5" />
-                  <span>Upload via Cloudinary</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={async (e) => {
-                      const f = e.target.files?.[0];
-                      if (!f) return;
-                      setCatUploadProgress(5);
-                      const url = await uploadImageToCloudinary(f, (p) =>
-                        setCatUploadProgress(p)
-                      );
-                      setCatImage(url);
-                      setTimeout(() => setCatUploadProgress(null), 500);
-                    }}
-                  />
-                </label>
-                {catUploadProgress !== null && (
-                  <p className="text-[11px] font-mono-num text-emerald-700 mt-1">
-                    Uploading: {catUploadProgress}%
-                  </p>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-semibold mb-1">Display Order</label>
-                  <input
-                    type="number"
-                    value={catOrder}
-                    onChange={(e) => setCatOrder(e.target.value)}
-                    className="w-full px-3 py-2 text-xs font-mono-num bg-[#FFFDFB] border border-[#1E1116]/15 rounded-lg"
-                  />
-                </div>
-                <div className="flex items-end pb-1">
-                  <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={catVisible}
-                      onChange={(e) => setCatVisible(e.target.checked)}
-                    />
-                    <span>Visible on Store</span>
-                  </label>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                className="w-full py-2.5 rounded-xl bg-[#1E1116] text-[#FFFDFB] text-xs font-semibold cursor-pointer"
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* Left Column: Add / Edit Category Form + Live Storefront Preview */}
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!catName.trim()) return;
+                  const trimmedName = catName.trim();
+                  await saveCategory(
+                    {
+                      name: trimmedName,
+                      image: catImage.trim() || getFallbackImageForCategory(trimmedName),
+                      order: Number(catOrder) || categories.length + 1,
+                      visible: catVisible,
+                    },
+                    editingCatId
+                  );
+                  setCatSavedMsg(
+                    editingCatId
+                      ? `Category "${trimmedName}" updated live across the website!`
+                      : `New category "${trimmedName}" added and published live on the website!`
+                  );
+                  setTimeout(() => setCatSavedMsg(''), 3500);
+                  setEditingCatId(undefined);
+                  setCatName('');
+                  setCatImage('');
+                  setCatOrder(String(categories.length + 2));
+                  setCatVisible(true);
+                }}
+                className="lg:col-span-5 p-5 sm:p-6 rounded-2xl bg-[#FDF6F6] border border-[#C89D7C]/35 space-y-4 h-fit"
               >
-                {editingCatId ? 'Update Category' : 'Save Category'}
-              </button>
-            </form>
-
-            <div className="lg:col-span-2 space-y-2.5">
-              {categories.map((cat) => (
-                <div
-                  key={cat.id}
-                  className="p-3.5 rounded-xl bg-[#FFFDFB] border border-[#1E1116]/10 flex items-center justify-between gap-3"
-                >
-                  <div className="flex items-center gap-3">
-                    <img
-                      src={cat.image}
-                      alt={cat.name}
-                      referrerPolicy="no-referrer"
-                      className="w-12 h-12 rounded-full object-cover bg-[#FDF6F6]"
-                    />
-                    <div>
-                      <p className="text-sm font-bold text-[#1E1116]">{cat.name}</p>
-                      <p className="text-[11px] text-[#1E1116]/60 font-mono-num">
-                        Order #{cat.order} · {cat.visible ? 'Visible' : 'Hidden'}
-                      </p>
-                    </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-[#C89D7C]">
+                      Instant Website Sync
+                    </p>
+                    <h3 className="text-lg font-serif-luxury font-bold text-[#1E1116]">
+                      {editingCatId ? 'Edit Website Category' : 'Add New Website Category'}
+                    </h3>
                   </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        saveCategory(
-                          {
-                            name: cat.name,
-                            image: cat.image,
-                            order: cat.order,
-                            visible: !cat.visible,
-                          },
-                          cat.id
-                        )
-                      }
-                      aria-label={`Toggle visibility for ${cat.name}`}
-                      className="p-2 rounded-lg border border-[#1E1116]/15 text-xs cursor-pointer"
-                    >
-                      {cat.visible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                    </button>
+                  {editingCatId && (
                     <button
                       type="button"
                       onClick={() => {
-                        setEditingCatId(cat.id);
-                        setCatName(cat.name);
-                        setCatImage(cat.image);
-                        setCatOrder(String(cat.order));
-                        setCatVisible(cat.visible);
+                        setEditingCatId(undefined);
+                        setCatName('');
+                        setCatImage('');
+                        setCatOrder(String(categories.length + 1));
+                        setCatVisible(true);
                       }}
-                      aria-label={`Edit ${cat.name}`}
-                      className="p-2 rounded-lg border border-[#1E1116]/15 text-xs cursor-pointer"
+                      className="text-xs font-semibold text-[#1E1116]/60 hover:text-[#1E1116] underline cursor-pointer"
                     >
-                      <Edit3 className="w-4 h-4" />
+                      Cancel Edit
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => deleteCategory(cat.id)}
-                      aria-label={`Delete ${cat.name}`}
-                      className="p-2 rounded-lg border border-red-200 text-red-600 text-xs cursor-pointer"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold mb-1 text-[#1E1116]">
+                    Category Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    data-testid="category-name-input"
+                    value={catName}
+                    onChange={(e) => setCatName(e.target.value)}
+                    placeholder="e.g. Bridal Jewellery, Nail Art, Gift Hampers..."
+                    className="w-full px-3.5 py-2.5 text-xs bg-[#FFFDFB] border border-[#1E1116]/15 rounded-xl focus:outline-none focus:border-[#C89D7C]"
+                  />
+                </div>
+
+                {/* Cover Image Upload + URL + 1-Tap Luxury Presets */}
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold text-[#1E1116]">
+                    Category Cover Photo (Cloudinary Upload, URL, or 1-Tap Preset)
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={catImage}
+                      onChange={(e) => setCatImage(e.target.value)}
+                      placeholder="Paste image URL or leave blank for auto-luxury cover..."
+                      className="flex-1 px-3 py-2 text-xs bg-[#FFFDFB] border border-[#1E1116]/15 rounded-xl"
+                    />
+                    <label className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#1E1116] hover:bg-[#C89D7C] text-[#FFFDFB] hover:text-[#1E1116] text-xs font-semibold cursor-pointer shrink-0 transition-colors">
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Upload Photo</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const f = e.target.files?.[0];
+                          if (!f) return;
+                          setCatUploadProgress(5);
+                          const url = await uploadImageToCloudinary(f, (p) =>
+                            setCatUploadProgress(p)
+                          );
+                          setCatImage(url);
+                          setTimeout(() => setCatUploadProgress(null), 500);
+                        }}
+                      />
+                    </label>
+                  </div>
+
+                  {catUploadProgress !== null && (
+                    <p className="text-[11px] font-mono-num text-emerald-700">
+                      Uploading category cover: {catUploadProgress}%
+                    </p>
+                  )}
+
+                  {/* 1-Tap Luxury Cover Presets */}
+                  <div className="pt-1">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-[#1E1116]/60 mb-1.5">
+                      Or Pick a 1-Click Luxury Cover Preset:
+                    </p>
+                    <div className="grid grid-cols-4 gap-2">
+                      {CATEGORY_IMAGE_PRESETS.map((preset) => {
+                        const isSelected = catImage === preset.url;
+                        return (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            onClick={() => setCatImage(preset.url)}
+                            className={`p-1.5 rounded-xl border text-center transition-all cursor-pointer ${
+                              isSelected
+                                ? 'border-[#1E1116] bg-[#FFFDFB] shadow-2xs'
+                                : 'border-[#1E1116]/10 bg-[#FFFDFB]/60 hover:border-[#C89D7C]'
+                            }`}
+                          >
+                            <img
+                              src={preset.url}
+                              alt={preset.label}
+                              className="w-full h-11 rounded-lg object-cover mb-1"
+                            />
+                            <span className="block text-[9px] font-semibold text-[#1E1116] truncate">
+                              {preset.label}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
-              ))}
+
+                {/* Live Mobile & Desktop Storefront Preview */}
+                <div className="p-3.5 rounded-xl bg-[#FFFDFB] border border-[#1E1116]/10 space-y-2.5">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-[#C89D7C]">
+                    Live Website Preview (Mobile & Desktop)
+                  </p>
+                  <div className="flex items-center gap-4">
+                    {/* Mobile Story Bubble Preview */}
+                    <div className="flex flex-col items-center gap-1 shrink-0">
+                      <div className="w-14 h-14 rounded-full p-0.5 border-2 border-[#C89D7C] overflow-hidden bg-[#FDF6F6]">
+                        <img
+                          src={resolveImageUrl(catImage, catName || 'Cosmetic Products')}
+                          alt={catName || 'Category preview'}
+                          onError={(e) => handleImageFallback(e, catName || 'Cosmetic Products')}
+                          className="w-full h-full rounded-full object-cover"
+                        />
+                      </div>
+                      <span className="text-[10px] font-semibold text-[#1E1116] max-w-[76px] truncate">
+                        {catName.trim() || 'New Category'}
+                      </span>
+                      <span className="text-[9px] text-[#1E1116]/50">Mobile App</span>
+                    </div>
+
+                    {/* Desktop Department Card Preview */}
+                    <div className="flex-1 relative h-24 rounded-xl overflow-hidden border border-[#1E1116]/15 bg-[#1E1116]">
+                      <img
+                        src={resolveImageUrl(catImage, catName || 'Cosmetic Products')}
+                        alt={catName || 'Desktop preview'}
+                        onError={(e) => handleImageFallback(e, catName || 'Cosmetic Products')}
+                        className="w-full h-full object-cover opacity-85"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-[#1E1116]/90 via-[#1E1116]/30 to-transparent flex flex-col justify-end p-2.5">
+                        <span className="text-[9px] font-semibold uppercase tracking-widest text-[#D4AF37]">
+                          Desktop Card Preview
+                        </span>
+                        <p className="text-xs font-serif-luxury font-bold text-[#FFFDFB] truncate">
+                          {catName.trim() || 'New Category Name'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">Display Order #</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={catOrder}
+                      onChange={(e) => setCatOrder(e.target.value)}
+                      className="w-full px-3 py-2 text-xs font-mono-num bg-[#FFFDFB] border border-[#1E1116]/15 rounded-xl"
+                    />
+                  </div>
+                  <div className="flex items-end pb-2">
+                    <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={catVisible}
+                        onChange={(e) => setCatVisible(e.target.checked)}
+                      />
+                      <span>Visible on Website</span>
+                    </label>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  data-testid="save-category-submit-btn"
+                  className="w-full py-3 rounded-xl bg-[#1E1116] hover:bg-[#C89D7C] text-[#FFFDFB] hover:text-[#1E1116] text-xs font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>
+                    {editingCatId
+                      ? 'Save Category Changes Live'
+                      : 'Add & Publish Category to Website'}
+                  </span>
+                </button>
+              </form>
+
+              {/* Right Column: Live Website Categories List, Reordering & Product Counts */}
+              <div className="lg:col-span-7 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 pb-1">
+                  <div>
+                    <h3 className="text-base font-serif-luxury font-bold text-[#1E1116]">
+                      Active Website Categories ({categories.length})
+                    </h3>
+                    <p className="text-xs text-[#1E1116]/60">
+                      Every category added here automatically updates the Desktop Header, Mobile Category Bar, Department Showcase, and Product Filters.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await restoreDefaultCategories();
+                      setCatSavedMsg('All 7 official Girlz Zone categories verified & restored!');
+                      setTimeout(() => setCatSavedMsg(''), 3000);
+                    }}
+                    className="px-3 py-1.5 rounded-xl border border-[#1E1116]/15 bg-[#FFFDFB] hover:border-[#C89D7C] text-[11px] font-semibold flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 text-[#C89D7C]" />
+                    <span>Restore 7 Default Categories</span>
+                  </button>
+                </div>
+
+                {categories.map((cat, idx) => {
+                  const catProdCount = products.filter(
+                    (p) => p.category.toLowerCase() === cat.name.toLowerCase()
+                  ).length;
+
+                  return (
+                    <div
+                      key={cat.id}
+                      data-testid={`admin-category-row-${cat.name}`}
+                      className="p-3.5 sm:p-4 rounded-2xl bg-[#FFFDFB] border border-[#1E1116]/10 hover:border-[#C89D7C]/50 transition-all flex flex-wrap sm:flex-nowrap items-center justify-between gap-3"
+                    >
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        <img
+                          src={resolveImageUrl(cat.image, cat.name)}
+                          alt={cat.name}
+                          onError={(e) => handleImageFallback(e, cat.name)}
+                          referrerPolicy="no-referrer"
+                          className="w-13 h-13 rounded-2xl object-cover bg-[#FDF6F6] border border-[#C89D7C]/30 shrink-0"
+                        />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-bold text-[#1E1116] truncate">{cat.name}</p>
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                                cat.visible
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : 'bg-neutral-100 text-neutral-600'
+                              }`}
+                            >
+                              {cat.visible ? 'Live on Website' : 'Hidden'}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-[#1E1116]/60 font-mono-num mt-0.5">
+                            Order #{cat.order} · {catProdCount}{' '}
+                            {catProdCount === 1 ? 'Product' : 'Products'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 ml-auto">
+                        {/* Quick Add Product in this Category */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            openAddProductModal();
+                            setProdCategory(cat.name);
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg bg-[#FDF6F6] hover:bg-[#C89D7C] text-[#1E1116] text-[11px] font-semibold border border-[#C89D7C]/30 transition-colors cursor-pointer whitespace-nowrap"
+                        >
+                          + Add Product
+                        </button>
+
+                        {/* Move Up / Down Order Buttons */}
+                        <button
+                          type="button"
+                          disabled={idx === 0}
+                          onClick={() => reorderCategory(cat.id, 'UP')}
+                          aria-label={`Move ${cat.name} up`}
+                          className="p-2 rounded-lg border border-[#1E1116]/15 disabled:opacity-30 hover:bg-[#FDF6F6] text-xs cursor-pointer"
+                        >
+                          <ArrowUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={idx === categories.length - 1}
+                          onClick={() => reorderCategory(cat.id, 'DOWN')}
+                          aria-label={`Move ${cat.name} down`}
+                          className="p-2 rounded-lg border border-[#1E1116]/15 disabled:opacity-30 hover:bg-[#FDF6F6] text-xs cursor-pointer"
+                        >
+                          <ArrowDown className="w-3.5 h-3.5" />
+                        </button>
+
+                        {/* Toggle Visibility */}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            saveCategory(
+                              {
+                                name: cat.name,
+                                image: cat.image,
+                                order: cat.order,
+                                visible: !cat.visible,
+                              },
+                              cat.id
+                            )
+                          }
+                          aria-label={`Toggle visibility for ${cat.name}`}
+                          className="p-2 rounded-lg border border-[#1E1116]/15 hover:bg-[#FDF6F6] text-xs cursor-pointer"
+                        >
+                          {cat.visible ? (
+                            <Eye className="w-4 h-4 text-emerald-700" />
+                          ) : (
+                            <EyeOff className="w-4 h-4 text-[#1E1116]/40" />
+                          )}
+                        </button>
+
+                        {/* Edit Category */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingCatId(cat.id);
+                            setCatName(cat.name);
+                            setCatImage(cat.image);
+                            setCatOrder(String(cat.order));
+                            setCatVisible(cat.visible);
+                          }}
+                          aria-label={`Edit ${cat.name}`}
+                          className="p-2 rounded-lg border border-[#1E1116]/15 hover:bg-[#FDF6F6] text-xs cursor-pointer"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+
+                        {/* Delete Category */}
+                        <button
+                          type="button"
+                          onClick={() => deleteCategory(cat.id)}
+                          aria-label={`Delete ${cat.name}`}
+                          className="p-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 text-xs cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}
@@ -1367,127 +2310,319 @@ export const AdminPage: React.FC = () => {
           </div>
         )}
 
-        {/* MODULE 6: COUPONS & PROMO CODES MANAGER */}
+        {/* MODULE 6: COUPONS & PROMO CODES STUDIO */}
         {activeTab === 'coupons' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                if (!couponCode.trim()) return;
-                await saveCoupon({
-                  code: couponCode.trim().toUpperCase(),
-                  type: couponType,
-                  value: Number(couponValue) || 10,
-                  minOrderAmount: Number(couponMinOrder) || 0,
-                  active: true,
-                  description:
-                    couponDesc.trim() ||
-                    `${couponType === 'PERCENT' ? `${couponValue}% OFF` : `₹${couponValue} OFF`} on orders above ₹${couponMinOrder}`,
-                });
-                setCouponCode('');
-                setCouponDesc('');
-              }}
-              className="p-5 rounded-2xl bg-[#FDF6F6] border border-[#C89D7C]/30 space-y-3 h-fit"
-            >
-              <h3 className="text-base font-serif-luxury font-bold">Create Promo Code</h3>
+          <div className="space-y-6">
+            {couponSavedMsg && (
+              <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
+                <Check className="w-4 h-4" />
+                <span>{couponSavedMsg}</span>
+              </div>
+            )}
+
+            {/* 1-Click Ready Promo Code Templates */}
+            <div className="p-5 rounded-2xl bg-[#FDF6F6] border border-[#C89D7C]/35 space-y-3">
               <div>
-                <label className="block text-xs font-semibold mb-1">Coupon Code *</label>
-                <input
-                  type="text"
-                  required
-                  value={couponCode}
-                  onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                  placeholder="e.g. GIRLZ10"
-                  className="w-full px-3 py-2 text-xs font-mono-num uppercase bg-[#FFFDFB] border border-[#1E1116]/15 rounded-lg"
-                />
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#C89D7C]">
+                  Instant Discount Publisher
+                </p>
+                <h3 className="text-base font-serif-luxury font-bold text-[#1E1116]">
+                  1-Click Ready Promo Code Templates (Tap to Activate Live on Website)
+                </h3>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-semibold mb-1">Discount Type</label>
-                  <select
-                    value={couponType}
-                    onChange={(e) => setCouponType(e.target.value as 'PERCENT' | 'FLAT')}
-                    className="w-full px-3 py-2 text-xs bg-[#FFFDFB] border border-[#1E1116]/15 rounded-lg"
-                  >
-                    <option value="PERCENT">Percentage (%)</option>
-                    <option value="FLAT">Flat Discount (₹)</option>
-                  </select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {[
+                  {
+                    code: 'WELCOME10',
+                    type: 'PERCENT' as const,
+                    value: 10,
+                    minOrderAmount: 0,
+                    desc: '10% OFF on any order (No minimum order)',
+                  },
+                  {
+                    code: 'GIRLZ20',
+                    type: 'PERCENT' as const,
+                    value: 20,
+                    minOrderAmount: 499,
+                    desc: '20% OFF on orders above ₹499',
+                  },
+                  {
+                    code: 'FLAT50',
+                    type: 'FLAT' as const,
+                    value: 50,
+                    minOrderAmount: 299,
+                    desc: 'Flat ₹50 OFF on orders above ₹299',
+                  },
+                  {
+                    code: 'BRIDAL100',
+                    type: 'FLAT' as const,
+                    value: 100,
+                    minOrderAmount: 799,
+                    desc: 'Flat ₹100 OFF on orders above ₹799',
+                  },
+                ].map((tpl) => {
+                  const alreadyExists = coupons.some(
+                    (c) => c.code.toUpperCase() === tpl.code && c.active
+                  );
+                  return (
+                    <div
+                      key={tpl.code}
+                      className="p-3.5 rounded-xl bg-[#FFFDFB] border border-[#1E1116]/12 flex flex-col justify-between gap-2.5"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono-num text-xs font-bold px-2 py-0.5 rounded bg-[#FDF6F6] border border-[#C89D7C]/40 text-[#1E1116]">
+                            {tpl.code}
+                          </span>
+                          <span className="text-xs font-bold text-emerald-700">
+                            {tpl.type === 'PERCENT' ? `${tpl.value}% OFF` : `₹${tpl.value} OFF`}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-[#1E1116]/65 mt-1.5">{tpl.desc}</p>
+                      </div>
+                      <button
+                        type="button"
+                        data-testid={`quick-create-coupon-${tpl.code}`}
+                        onClick={async () => {
+                          const existing = coupons.find(
+                            (c) => c.code.toUpperCase() === tpl.code
+                          );
+                          await saveCoupon(
+                            {
+                              code: tpl.code,
+                              type: tpl.type,
+                              value: tpl.value,
+                              minOrderAmount: tpl.minOrderAmount,
+                              active: true,
+                              description: tpl.desc,
+                            },
+                            existing?.id
+                          );
+                          setCouponSavedMsg(
+                            `Promo code "${tpl.code}" is now LIVE on the website & checkout!`
+                          );
+                          setTimeout(() => setCouponSavedMsg(''), 3500);
+                        }}
+                        className={`w-full py-2 rounded-lg text-xs font-semibold cursor-pointer ${
+                          alreadyExists
+                            ? 'bg-emerald-700 text-white'
+                            : 'bg-[#1E1116] hover:bg-[#C89D7C] text-[#FFFDFB] hover:text-[#1E1116]'
+                        }`}
+                      >
+                        {alreadyExists ? '✓ Active on Website' : `+ Activate ${tpl.code}`}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!couponCode.trim()) return;
+                  const cleanCode = couponCode.trim().toUpperCase();
+                  const numVal = Number(couponValue) || 10;
+                  const numMin = Math.max(0, Number(couponMinOrder) || 0);
+                  await saveCoupon(
+                    {
+                      code: cleanCode,
+                      type: couponType,
+                      value: numVal,
+                      minOrderAmount: numMin,
+                      active: true,
+                      description:
+                        couponDesc.trim() ||
+                        `${couponType === 'PERCENT' ? `${numVal}% OFF` : `Flat ₹${numVal} OFF`}${
+                          numMin > 0 ? ` on orders above ₹${numMin}` : ' (No minimum order)'
+                        }`,
+                    },
+                    editingCouponId
+                  );
+                  setCouponSavedMsg(
+                    editingCouponId
+                      ? `Promo code "${cleanCode}" updated live!`
+                      : `Custom promo code "${cleanCode}" created & published live on website!`
+                  );
+                  setTimeout(() => setCouponSavedMsg(''), 3500);
+                  setEditingCouponId(undefined);
+                  setCouponCode('');
+                  setCouponDesc('');
+                  setCouponMinOrder('0');
+                }}
+                className="p-5 rounded-2xl bg-[#FDF6F6] border border-[#C89D7C]/30 space-y-3.5 h-fit"
+              >
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-serif-luxury font-bold">
+                    {editingCouponId ? 'Edit Promo Code' : 'Create Custom Promo Code'}
+                  </h3>
+                  {editingCouponId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingCouponId(undefined);
+                        setCouponCode('');
+                        setCouponDesc('');
+                      }}
+                      className="text-xs text-[#1E1116]/60 underline cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  )}
                 </div>
+
                 <div>
-                  <label className="block text-xs font-semibold mb-1">Discount Value</label>
+                  <label className="block text-xs font-semibold mb-1">Promo Code Name *</label>
+                  <input
+                    type="text"
+                    required
+                    data-testid="admin-coupon-code-input"
+                    value={couponCode}
+                    onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                    placeholder="e.g. GIRLZ10, FESTIVE50"
+                    className="w-full px-3 py-2 text-xs font-mono-num uppercase bg-[#FFFDFB] border border-[#1E1116]/15 rounded-lg"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">Discount Type</label>
+                    <select
+                      value={couponType}
+                      onChange={(e) => setCouponType(e.target.value as 'PERCENT' | 'FLAT')}
+                      className="w-full px-3 py-2 text-xs bg-[#FFFDFB] border border-[#1E1116]/15 rounded-lg"
+                    >
+                      <option value="PERCENT">Percentage (% OFF)</option>
+                      <option value="FLAT">Flat Discount (₹ OFF)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">
+                      Discount Value ({couponType === 'PERCENT' ? '%' : '₹'}) *
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      data-testid="admin-coupon-value-input"
+                      value={couponValue}
+                      onChange={(e) => setCouponValue(e.target.value)}
+                      className="w-full px-3 py-2 text-xs font-mono-num bg-[#FFFDFB] border border-[#1E1116]/15 rounded-lg"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold mb-1">
+                    Minimum Order Value (₹) — Put 0 for No Minimum
+                  </label>
                   <input
                     type="number"
-                    required
-                    value={couponValue}
-                    onChange={(e) => setCouponValue(e.target.value)}
+                    min="0"
+                    data-testid="admin-coupon-min-input"
+                    value={couponMinOrder}
+                    onChange={(e) => setCouponMinOrder(e.target.value)}
                     className="w-full px-3 py-2 text-xs font-mono-num bg-[#FFFDFB] border border-[#1E1116]/15 rounded-lg"
                   />
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-xs font-semibold mb-1">
-                  Minimum Order Value (₹)
-                </label>
-                <input
-                  type="number"
-                  value={couponMinOrder}
-                  onChange={(e) => setCouponMinOrder(e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-mono-num bg-[#FFFDFB] border border-[#1E1116]/15 rounded-lg"
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="w-full py-2.5 rounded-xl bg-[#1E1116] text-[#FFFDFB] text-xs font-semibold cursor-pointer"
-              >
-                Create Coupon Code
-              </button>
-            </form>
-
-            <div className="lg:col-span-2 space-y-3">
-              {coupons.length === 0 ? (
-                <div className="p-8 rounded-2xl bg-[#FDF6F6] text-center text-xs text-[#1E1116]/60">
-                  No active promo coupons yet. Create one on the left to offer discounts at checkout.
+                <div>
+                  <label className="block text-xs font-semibold mb-1">
+                    Offer Description (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={couponDesc}
+                    onChange={(e) => setCouponDesc(e.target.value)}
+                    placeholder="e.g. Special Festival Discount"
+                    className="w-full px-3 py-2 text-xs bg-[#FFFDFB] border border-[#1E1116]/15 rounded-lg"
+                  />
                 </div>
-              ) : (
-                coupons.map((cpn) => (
-                  <div
-                    key={cpn.id}
-                    className="p-4 rounded-xl bg-[#FFFDFB] border border-[#1E1116]/10 flex items-center justify-between gap-4"
-                  >
-                    <div>
-                      <span className="font-mono-num text-sm font-bold text-[#1E1116] bg-[#FDF6F6] px-2.5 py-1 rounded border border-[#C89D7C]/40">
-                        {cpn.code}
-                      </span>
-                      <p className="text-xs text-[#1E1116]/70 mt-1.5">
-                        {cpn.type === 'PERCENT' ? `${cpn.value}% OFF` : `Flat ₹${cpn.value} OFF`} · Min Order: ₹{cpn.minOrderAmount}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => saveCoupon({ ...cpn, active: !cpn.active }, cpn.id)}
-                        className={`px-3 py-1 rounded-lg text-xs font-semibold cursor-pointer ${
-                          cpn.active
-                            ? 'bg-emerald-50 text-emerald-700'
-                            : 'bg-neutral-100 text-neutral-500'
-                        }`}
-                      >
-                        {cpn.active ? 'Active' : 'Disabled'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => deleteCoupon(cpn.id)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg cursor-pointer"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
+
+                <button
+                  type="submit"
+                  data-testid="admin-save-coupon-btn"
+                  className="w-full py-2.5 rounded-xl bg-[#1E1116] hover:bg-[#C89D7C] text-[#FFFDFB] hover:text-[#1E1116] text-xs font-semibold cursor-pointer"
+                >
+                  {editingCouponId ? 'Update Promo Code' : 'Publish Promo Code to Website'}
+                </button>
+              </form>
+
+              <div className="lg:col-span-2 space-y-3">
+                <h3 className="text-base font-serif-luxury font-bold text-[#1E1116]">
+                  Active & Saved Promo Codes ({coupons.length})
+                </h3>
+                {coupons.length === 0 ? (
+                  <div className="p-8 rounded-2xl bg-[#FDF6F6] text-center text-xs text-[#1E1116]/60">
+                    No promo coupons created yet. Click any 1-Click Template above or create a custom code on the left to offer discounts on the website.
                   </div>
-                ))
-              )}
+                ) : (
+                  coupons.map((cpn) => (
+                    <div
+                      key={cpn.id}
+                      data-testid={`admin-coupon-row-${cpn.code}`}
+                      className="p-4 rounded-xl bg-[#FFFDFB] border border-[#1E1116]/10 flex flex-wrap items-center justify-between gap-4"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono-num text-sm font-bold text-[#1E1116] bg-[#FDF6F6] px-2.5 py-1 rounded border border-[#C89D7C]/40">
+                            {cpn.code}
+                          </span>
+                          <span className="text-xs font-bold text-emerald-700">
+                            {cpn.type === 'PERCENT'
+                              ? `${cpn.value}% OFF`
+                              : `Flat ₹${cpn.value} OFF`}
+                          </span>
+                        </div>
+                        <p className="text-xs text-[#1E1116]/70 mt-1.5">
+                          {cpn.description} ·{' '}
+                          {cpn.minOrderAmount > 0
+                            ? `Min Order: ₹${cpn.minOrderAmount}`
+                            : 'No Minimum Order'}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => saveCoupon({ ...cpn, active: !cpn.active }, cpn.id)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${
+                            cpn.active
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-neutral-100 text-neutral-500'
+                          }`}
+                        >
+                          {cpn.active ? 'Active on Website' : 'Disabled'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingCouponId(cpn.id);
+                            setCouponCode(cpn.code);
+                            setCouponType(cpn.type);
+                            setCouponValue(String(cpn.value));
+                            setCouponMinOrder(String(cpn.minOrderAmount));
+                            setCouponDesc(cpn.description || '');
+                          }}
+                          aria-label={`Edit coupon ${cpn.code}`}
+                          className="p-2 border border-[#1E1116]/15 hover:bg-[#FDF6F6] rounded-lg cursor-pointer"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Delete coupon ${cpn.code}`}
+                          onClick={() => deleteCoupon(cpn.id)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -1641,16 +2776,17 @@ export const AdminPage: React.FC = () => {
         )}
       </main>
 
-      {/* Mobile Fixed 5-Tab Bottom Navigation Bar for Admin (< 768px) */}
+      {/* Mobile Fixed 6-Tab Bottom Navigation Bar for Admin (< 768px) */}
       <nav
         aria-label="Mobile admin navigation"
-        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#1E1116] text-[#FFFDFB] grid grid-cols-5 items-center h-14 px-1 border-t border-[#FFFDFB]/10"
+        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#1E1116] text-[#FFFDFB] grid grid-cols-6 items-center h-14 px-1 border-t border-[#FFFDFB]/10"
       >
         {[
           { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+          { id: 'themes_messages', label: 'Themes', icon: Palette },
           { id: 'orders', label: 'Orders', icon: Package },
           { id: 'products', label: 'Products', icon: ShoppingBag },
-          { id: 'banners', label: 'Content', icon: ImageIcon },
+          { id: 'categories', label: 'Categories', icon: Layers },
           { id: 'settings', label: 'Settings', icon: Settings },
         ].map((t) => {
           const Icon = t.icon;
@@ -1665,7 +2801,7 @@ export const AdminPage: React.FC = () => {
               }`}
             >
               <Icon className="w-4 h-4" />
-              <span className="text-[10px] mt-0.5">{t.label}</span>
+              <span className="text-[9px] mt-0.5">{t.label}</span>
             </button>
           );
         })}
@@ -1711,7 +2847,16 @@ export const AdminPage: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold mb-1">Category *</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold">Category *</label>
+                    <button
+                      type="button"
+                      onClick={() => setIsQuickCatOpen((prev) => !prev)}
+                      className="text-[11px] font-semibold text-[#C89D7C] hover:underline cursor-pointer"
+                    >
+                      {isQuickCatOpen ? 'Close' : '+ New Category'}
+                    </button>
+                  </div>
                   <select
                     value={prodCategory}
                     onChange={(e) => setProdCategory(e.target.value)}
@@ -1723,6 +2868,36 @@ export const AdminPage: React.FC = () => {
                       </option>
                     ))}
                   </select>
+                  {isQuickCatOpen && (
+                    <div className="mt-2 p-2.5 rounded-xl bg-[#FDF6F6] border border-[#C89D7C]/40 flex gap-2">
+                      <input
+                        type="text"
+                        value={quickCatName}
+                        onChange={(e) => setQuickCatName(e.target.value)}
+                        placeholder="New category name..."
+                        className="flex-1 px-2.5 py-1.5 text-xs bg-[#FFFDFB] border border-[#1E1116]/15 rounded-lg"
+                      />
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!quickCatName.trim()) return;
+                          const newName = quickCatName.trim();
+                          await saveCategory({
+                            name: newName,
+                            image: getFallbackImageForCategory(newName),
+                            order: categories.length + 1,
+                            visible: true,
+                          });
+                          setProdCategory(newName);
+                          setQuickCatName('');
+                          setIsQuickCatOpen(false);
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-[#1E1116] text-[#FFFDFB] text-xs font-semibold cursor-pointer shrink-0"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 

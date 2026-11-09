@@ -46,6 +46,21 @@ export const FLIPKART_ORDER_STAGES: {
 
 export type ProductBadge = 'Bestseller' | 'New Arrival' | 'Trending' | 'Anti-Tarnish';
 
+export type StoreTemplateId =
+  | 'prestige'
+  | 'nykaa_luxe'
+  | 'parisian_atelier'
+  | 'royal_bridal';
+
+export type ThemePresetId =
+  | 'rosegold_pearl'
+  | 'velvet_noir'
+  | 'emerald_palace'
+  | 'ruby_bridal'
+  | 'lavender_silk'
+  | 'mocha_atelier'
+  | 'custom';
+
 export interface Category {
   id: string;
   name: string;
@@ -184,4 +199,32 @@ export interface StoreConfig {
   adminId: string;
   adminEmail: string;
   adminPassword: string;
+
+  // 4 Storefront Templates & Global Color Theme Control
+  activeTemplate: StoreTemplateId;
+  themePreset: ThemePresetId;
+  themeBgPrimary: string;
+  themeBgSecondary: string;
+  themeTextPrimary: string;
+  themeAccentPrimary: string;
+  themeAccentSecondary: string;
+
+  // Full Storefront & WhatsApp Message Control
+  welcomeBannerActive: boolean;
+  welcomeBannerText: string;
+  catalogSectionKicker: string;
+  catalogSectionTitle: string;
+  emptyCatalogTitle: string;
+  emptyCatalogSubtitle: string;
+  boutiqueSectionKicker: string;
+  boutiqueSectionTitle: string;
+  boutiqueSectionSubtitle: string;
+  footerTagline: string;
+  orderConfirmationMessage: string;
+  whatsappGeneralInquiryMessage: string;
+  whatsappProductInquiryTemplate: string;
+  whatsappOrderInvoiceHeader: string;
+  whatsappOrderInvoiceFooter: string;
+  whatsappTrackingUpdateIntro: string;
+  whatsappTrackingUpdateOutro: string;
 }

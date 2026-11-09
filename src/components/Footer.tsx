@@ -66,7 +66,8 @@ export const Footer: React.FC<FooterProps> = ({ onSelectCategory, onTrackOrderCl
             {storeConfig.storeName || 'Girlz Zone'}
           </h2>
           <p className="text-xs text-[#FFFDFB]/70 leading-relaxed">
-            Your premier destination in Ambernath for luxury cosmetics, beauty essentials, skin care, hair accessories, 18K anti-tarnish jewellery, and fine perfumes.
+            {storeConfig.footerTagline ||
+              'Your premier destination in Ambernath for luxury cosmetics, beauty essentials, skin care, hair accessories, 18K anti-tarnish jewellery, and fine perfumes.'}
           </p>
         </div>
 
@@ -108,7 +109,8 @@ export const Footer: React.FC<FooterProps> = ({ onSelectCategory, onTrackOrderCl
             <li>
               <a
                 href={`https://wa.me/${waClean}?text=${encodeURIComponent(
-                  'Hello Girlz Zone! I need assistance with an order.'
+                  storeConfig.whatsappGeneralInquiryMessage ||
+                    'Hello Girlz Zone! I need assistance with an order.'
                 )}`}
                 target="_blank"
                 rel="noopener noreferrer"

@@ -2,12 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DEFAULT_CATEGORY_NAMES,
+  STORE_TEMPLATES,
+  THEME_PRESETS,
   appendTrackingStage,
   buildAdminTrackingWhatsAppUrl,
   buildOrderInvoiceWhatsAppUrl,
   calculateDiscountPercent,
   calculateOrderTotals,
   formatDeliveryAddress,
+  formatMessageTemplate,
   generateOrderNumber,
   isValidTenDigitPhone,
   normalizePhone,
@@ -25,6 +28,27 @@ test('DEFAULT_CATEGORY_NAMES contains strictly the 7 official categories', () =>
     'Anti Tarnish Jewellery',
     'Deo And Perfume',
   ]);
+});
+
+test('STORE_TEMPLATES defines 4 distinct templates and THEME_PRESETS defines 6 palettes', () => {
+  assert.equal(STORE_TEMPLATES.length, 4);
+  assert.deepEqual(
+    STORE_TEMPLATES.map((t) => t.id),
+    ['prestige', 'nykaa_luxe', 'parisian_atelier', 'royal_bridal']
+  );
+  assert.equal(THEME_PRESETS.length, 6);
+});
+
+test('formatMessageTemplate interpolates dynamic order and customer placeholders', () => {
+  const formatted = formatMessageTemplate(
+    'Namaste {customerName}, your order {orderId} is now {status}!',
+    {
+      customerName: 'Priya',
+      orderId: 'GZ-10005',
+      status: 'Shipped',
+    }
+  );
+  assert.equal(formatted, 'Namaste Priya, your order GZ-10005 is now Shipped!');
 });
 
 test('calculateDiscountPercent computes accurate percentage off', () => {
@@ -159,11 +183,22 @@ test('formatDeliveryAddress and WhatsApp invoice/tracking links format accuratel
     updatedAt: 2000,
   };
 
-  const invoiceUrl = buildOrderInvoiceWhatsAppUrl(order);
+  const invoiceUrl = buildOrderInvoiceWhatsAppUrl(
+    order,
+    '918329783642',
+    'VIP ORDER {orderId}',
+    'Thank you {customerName}!'
+  );
   assert.ok(invoiceUrl.startsWith('https://wa.me/918329783642?text='));
-  assert.ok(decodeURIComponent(invoiceUrl).includes('GZ-10001'));
+  assert.ok(decodeURIComponent(invoiceUrl).includes('VIP ORDER GZ-10001'));
+  assert.ok(decodeURIComponent(invoiceUrl).includes('Thank you Aarohi Sharma!'));
 
-  const trackingUrl = buildAdminTrackingWhatsAppUrl(order);
+  const trackingUrl = buildAdminTrackingWhatsAppUrl(
+    order,
+    'Hi {customerName}, update for {orderId}:',
+    'Warm regards, Girlz Zone'
+  );
   assert.ok(trackingUrl.startsWith('https://wa.me/919876543210?text='));
   assert.ok(decodeURIComponent(trackingUrl).includes('BD12345'));
+  assert.ok(decodeURIComponent(trackingUrl).includes('Warm regards, Girlz Zone'));
 });

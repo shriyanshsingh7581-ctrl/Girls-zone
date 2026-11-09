@@ -6,6 +6,10 @@ import {
   FLIPKART_ORDER_STAGES,
   Order,
   OrderStatus,
+  Product,
+  StoreConfig,
+  StoreTemplateId,
+  ThemePresetId,
   TrackingStep,
 } from '../types';
 
@@ -22,6 +26,138 @@ export const DEFAULT_CATEGORY_NAMES: string[] = [
 export const OFFICIAL_WHATSAPP_NUMBER = '918329783642';
 export const OFFICIAL_STORE_ADDRESS =
   'Shop no.3, Opp. Concept Arena, Near Smart Bazaar, Palegaon, Ambernath - 421501, Maharashtra';
+
+export interface StoreTemplateMeta {
+  id: StoreTemplateId;
+  name: string;
+  subtitle: string;
+  badge: string;
+  desktopFeatures: string;
+  mobileFeatures: string;
+}
+
+export const STORE_TEMPLATES: StoreTemplateMeta[] = [
+  {
+    id: 'prestige',
+    name: '1. Prestige Editorial Classic',
+    subtitle: 'Full-bleed cinematic hero carousel, portrait 4:5 cards & classic boutique story.',
+    badge: 'Flagship Luxury',
+    desktopFeatures: 'Wide Hero Slider + 7-Category Strip + 4-Col Portrait Grid',
+    mobileFeatures: 'Instagram Circular Category Bubbles + Swipe Hero + 2-Col Compact Grid',
+  },
+  {
+    id: 'nykaa_luxe',
+    name: '2. Luxe Beauty Bento & Magazine',
+    subtitle: 'Asymmetric split-screen magazine hero, visual category cards & full-width bag CTAs.',
+    badge: 'Modern Beauty App',
+    desktopFeatures: 'Split Editorial Hero + Visual Bento Category Tiles + Full-Button Cards',
+    mobileFeatures: 'Interactive Pill Scroller + Magazine Hero Card + 1-Tap Full Bar Add Button',
+  },
+  {
+    id: 'parisian_atelier',
+    name: '3. Parisian Haute Atelier',
+    subtitle: 'Architectural square gallery frames, centered serif typography & museum lookbook.',
+    badge: 'Minimalist Couture',
+    desktopFeatures: 'Dual-Frame Lookbook Hero + Square 1:1 Gallery Grid + Centered Editorial',
+    mobileFeatures: 'Clean Minimalist Tabs + Framed Lookbook Card + Square Centered Grid',
+  },
+  {
+    id: 'royal_bridal',
+    name: '4. Royal Jewellery & Bridal Boutique',
+    subtitle: 'Ornate arched portrait frames, champagne gold borders & royal medallion categories.',
+    badge: 'Bridal & Jewellery',
+    desktopFeatures: 'Arched Royal Showcase Hero + Medallion Categories + Gold-Framed Cards',
+    mobileFeatures: 'Arched Category Medallions + Royal Dome Hero + Ornate 2-Col Grid',
+  },
+];
+
+export interface ThemePresetMeta {
+  id: Exclude<ThemePresetId, 'custom'>;
+  name: string;
+  description: string;
+  bgPrimary: string;
+  bgSecondary: string;
+  textPrimary: string;
+  accentPrimary: string;
+  accentSecondary: string;
+}
+
+export const THEME_PRESETS: ThemePresetMeta[] = [
+  {
+    id: 'rosegold_pearl',
+    name: 'Rose Gold & Soft Pearl (Default)',
+    description: 'Warm pearl canvas, blush surfaces, deep velvet text & rose gold accents',
+    bgPrimary: '#FFFDFB',
+    bgSecondary: '#FDF6F6',
+    textPrimary: '#1E1116',
+    accentPrimary: '#C89D7C',
+    accentSecondary: '#D4AF37',
+  },
+  {
+    id: 'velvet_noir',
+    name: 'Champagne Ivory & Espresso Luxe',
+    description: 'Alabaster ivory canvas, warm sand cards, rich espresso ink & champagne gold',
+    bgPrimary: '#FAF7F2',
+    bgSecondary: '#F2ECE1',
+    textPrimary: '#181311',
+    accentPrimary: '#B8860B',
+    accentSecondary: '#D4AF37',
+  },
+  {
+    id: 'emerald_palace',
+    name: 'Emerald Royal & Mint Silk',
+    description: 'Ivory mint canvas, soft sage surfaces, deep forest emerald & antique gold',
+    bgPrimary: '#FBFDFC',
+    bgSecondary: '#F1F7F4',
+    textPrimary: '#0E231B',
+    accentPrimary: '#1B6B4C',
+    accentSecondary: '#C59B27',
+  },
+  {
+    id: 'ruby_bridal',
+    name: 'Bridal Crimson & Rose Petal',
+    description: 'Soft rosewater canvas, petal blush cards, royal burgundy ink & bridal gold',
+    bgPrimary: '#FFFBFB',
+    bgSecondary: '#FCEFEF',
+    textPrimary: '#2B0C13',
+    accentPrimary: '#A92643',
+    accentSecondary: '#D4AF37',
+  },
+  {
+    id: 'lavender_silk',
+    name: 'Lavender Silk & Plum Couture',
+    description: 'Cool pearl lilac canvas, lavender mist cards, deep plum text & rose amethyst',
+    bgPrimary: '#FDFCFE',
+    bgSecondary: '#F6F2FA',
+    textPrimary: '#1D1226',
+    accentPrimary: '#8E5EA2',
+    accentSecondary: '#C89D7C',
+  },
+  {
+    id: 'mocha_atelier',
+    name: 'Parisian Mocha & Cashmere',
+    description: 'Cashmere cream canvas, latte stone cards, dark cocoa typography & bronze',
+    bgPrimary: '#FDFBF9',
+    bgSecondary: '#F5EFEA',
+    textPrimary: '#231915',
+    accentPrimary: '#9C6B4E',
+    accentSecondary: '#C99E5A',
+  },
+];
+
+/**
+ * Interpolates `{key}` placeholders in an admin-configured message template.
+ */
+export function formatMessageTemplate(
+  template: string,
+  variables: Record<string, string | number | undefined>
+): string {
+  if (!template) return '';
+  return template.replace(/\{([a-zA-Z0-9_]+)\}/g, (_match, key) => {
+    const val = variables[key];
+    return val !== undefined && val !== null ? String(val) : '';
+  });
+}
 
 /**
  * Calculates integer discount percentage from selling price and original MRP.
@@ -181,9 +317,39 @@ export function appendTrackingStage(params: {
 }
 
 /**
+ * Builds a WhatsApp URL for customer product inquiry using the Admin's customizable template.
+ */
+export function buildProductInquiryWhatsAppUrl(
+  product: Product,
+  selectedVariant: string | undefined,
+  storeConfig?: Partial<StoreConfig>
+): string {
+  const cleanNumber =
+    (storeConfig?.whatsappNumber || OFFICIAL_WHATSAPP_NUMBER).replace(/\D/g, '') ||
+    OFFICIAL_WHATSAPP_NUMBER;
+  const defaultTemplate =
+    'Hello {storeName}! I would like to inquire about *{productName}* (₹{price}){variantText}.';
+  const rawTemplate = storeConfig?.whatsappProductInquiryTemplate || defaultTemplate;
+  const message = formatMessageTemplate(rawTemplate, {
+    storeName: storeConfig?.storeName || 'Girlz Zone',
+    productName: product.name,
+    price: product.price,
+    category: product.category,
+    variant: selectedVariant || '',
+    variantText: selectedVariant ? ` - Variant: ${selectedVariant}` : '',
+  });
+  return `https://wa.me/${cleanNumber}?text=${encodeURIComponent(message)}`;
+}
+
+/**
  * Builds a WhatsApp URL for customer order invoice or admin status notification.
  */
-export function buildOrderInvoiceWhatsAppUrl(order: Order, storeWhatsapp = OFFICIAL_WHATSAPP_NUMBER): string {
+export function buildOrderInvoiceWhatsAppUrl(
+  order: Order,
+  storeWhatsapp = OFFICIAL_WHATSAPP_NUMBER,
+  customHeader?: string,
+  customFooter?: string
+): string {
   const cleanNumber = storeWhatsapp.replace(/\D/g, '') || OFFICIAL_WHATSAPP_NUMBER;
   const itemLines = order.items
     .map(
@@ -199,8 +365,22 @@ export function buildOrderInvoiceWhatsAppUrl(order: Order, storeWhatsapp = OFFIC
       ? `Store Pickup at Girlz Zone, Ambernath`
       : formatDeliveryAddress(order.deliveryAddress);
 
+  const headerLine = formatMessageTemplate(customHeader || '*NEW ORDER — GIRLZ ZONE*', {
+    orderId: order.orderNumber,
+    customerName: order.customerName,
+    total: order.totalAmount,
+  });
+
+  const footerLine = customFooter
+    ? formatMessageTemplate(customFooter, {
+        orderId: order.orderNumber,
+        customerName: order.customerName,
+        total: order.totalAmount,
+      })
+    : '';
+
   const message = [
-    `*NEW ORDER — GIRLZ ZONE*`,
+    headerLine,
     `Order ID: *${order.orderNumber}*`,
     `Customer: ${order.customerName}`,
     `Phone: ${order.customerPhone}`,
@@ -217,6 +397,7 @@ export function buildOrderInvoiceWhatsAppUrl(order: Order, storeWhatsapp = OFFIC
     ``,
     `*Delivery Address:*`,
     addressText,
+    footerLine ? `\n${footerLine}` : '',
   ]
     .filter(Boolean)
     .join('\n');
@@ -224,13 +405,39 @@ export function buildOrderInvoiceWhatsAppUrl(order: Order, storeWhatsapp = OFFIC
   return `https://wa.me/${cleanNumber}?text=${encodeURIComponent(message)}`;
 }
 
-export function buildAdminTrackingWhatsAppUrl(order: Order): string {
+export function buildAdminTrackingWhatsAppUrl(
+  order: Order,
+  customIntro?: string,
+  customOutro?: string
+): string {
   const customerPhoneClean = normalizePhone(order.customerPhone);
   const waTarget = customerPhoneClean.length === 10 ? `91${customerPhoneClean}` : customerPhoneClean;
 
+  const introLine = formatMessageTemplate(
+    customIntro ||
+      'Hello *{customerName}*, here is the latest update for your *Girlz Zone* order *{orderId}*:',
+    {
+      customerName: order.customerName,
+      orderId: order.orderNumber,
+      status: order.status,
+      total: order.totalAmount,
+      courier: order.courierName || '',
+      trackingId: order.trackingId || '',
+    }
+  );
+
+  const outroLine = formatMessageTemplate(
+    customOutro || 'Thank you for shopping with Girlz Zone, Ambernath!',
+    {
+      customerName: order.customerName,
+      orderId: order.orderNumber,
+      status: order.status,
+      total: order.totalAmount,
+    }
+  );
+
   const lines = [
-    `Hello *${order.customerName}*,`,
-    `Here is the latest update for your *Girlz Zone* order *${order.orderNumber}*:`,
+    introLine,
     ``,
     `Current Status: *${order.status}*`,
     order.trackingNote ? `Update Note: ${order.trackingNote}` : '',
@@ -239,7 +446,7 @@ export function buildAdminTrackingWhatsAppUrl(order: Order): string {
     order.expectedDeliveryDate ? `Expected Delivery: ${order.expectedDeliveryDate}` : '',
     `Order Total: ₹${order.totalAmount} (${order.paymentMode})`,
     ``,
-    `Thank you for shopping with Girlz Zone, Ambernath!`,
+    outroLine,
   ]
     .filter(Boolean)
     .join('\n');

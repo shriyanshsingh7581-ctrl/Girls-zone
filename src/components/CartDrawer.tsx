@@ -46,6 +46,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onViewOrderTracking }) =
     storeConfig,
     currentCustomer,
     setIsAuthModalOpen,
+    loginWithGoogle,
+    selectedPromoCode,
+    setSelectedPromoCode,
     placeOrder,
   } = useStore();
 
@@ -78,10 +81,31 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onViewOrderTracking }) =
     }
   }, [currentCustomer]);
 
+  // Auto-apply selectedPromoCode when selected from Storefront banner
+  useEffect(() => {
+    if (selectedPromoCode) {
+      setCouponInput(selectedPromoCode);
+      const found = coupons.find(
+        (c) => c.code.toUpperCase() === selectedPromoCode.toUpperCase() && c.active
+      );
+      if (found) {
+        setAppliedCouponCode(found.code);
+        setCouponFeedback({
+          type: 'ok',
+          msg: `Promo code ${found.code} applied!`,
+        });
+      }
+      setSelectedPromoCode('');
+    }
+  }, [selectedPromoCode, coupons, setSelectedPromoCode]);
+
   if (!isCartOpen) return null;
 
+  const activeCoupons = coupons.filter((c) => c.active);
+
   const matchedCoupon = appliedCouponCode
-    ? coupons.find((c) => c.code.toUpperCase() === appliedCouponCode.toUpperCase()) || null
+    ? coupons.find((c) => c.code.toUpperCase() === appliedCouponCode.toUpperCase() && c.active) ||
+      null
     : null;
 
   const totals = calculateOrderTotals({
@@ -92,8 +116,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onViewOrderTracking }) =
     freeDeliveryThreshold: storeConfig.freeDeliveryThreshold,
   });
 
-  const handleApplyCoupon = () => {
-    const code = couponInput.trim().toUpperCase();
+  const applySpecificCoupon = (rawCode: string) => {
+    const code = rawCode.trim().toUpperCase();
+    setCouponInput(code);
     if (!code) return;
     const found = coupons.find((c) => c.code.toUpperCase() === code && c.active);
     if (!found) {
@@ -105,15 +130,23 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onViewOrderTracking }) =
       setAppliedCouponCode('');
       setCouponFeedback({
         type: 'err',
-        msg: `Add ₹${found.minOrderAmount - totals.subtotal} more to use ${found.code}.`,
+        msg: `Add ₹${found.minOrderAmount - totals.subtotal} more to use ${found.code} (Min order: ₹${found.minOrderAmount}).`,
       });
       return;
     }
     setAppliedCouponCode(found.code);
     setCouponFeedback({
       type: 'ok',
-      msg: `Promo code ${found.code} applied!`,
+      msg: `Promo code ${found.code} applied! You saved ₹${
+        found.type === 'PERCENT'
+          ? Math.round((totals.subtotal * found.value) / 100)
+          : Math.min(totals.subtotal, found.value)
+      }!`,
     });
+  };
+
+  const handleApplyCoupon = () => {
+    applySpecificCoupon(couponInput);
   };
 
   const handlePlaceOrder = async (e: React.FormEvent) => {
@@ -223,7 +256,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onViewOrderTracking }) =
                   Order #{placedOrder.orderNumber} Placed!
                 </h3>
                 <p className="text-xs text-[#1E1116]/70 mt-1">
-                  Your order has been registered in real time. You can send the formatted invoice to Girlz Zone on WhatsApp or track your live delivery status below.
+                  {storeConfig.orderConfirmationMessage ||
+                    'Your order has been registered in real time. You can send the formatted invoice to Girlz Zone on WhatsApp or track your live delivery status below.'}
                 </p>
               </div>
 
@@ -256,7 +290,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onViewOrderTracking }) =
 
               <div className="space-y-2.5 pt-2">
                 <a
-                  href={buildOrderInvoiceWhatsAppUrl(placedOrder, storeConfig.whatsappNumber)}
+                  href={buildOrderInvoiceWhatsAppUrl(
+                    placedOrder,
+                    storeConfig.whatsappNumber,
+                    storeConfig.whatsappOrderInvoiceHeader,
+                    storeConfig.whatsappOrderInvoiceFooter
+                  )}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="w-full py-3 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 transition-colors"
@@ -373,36 +412,107 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onViewOrderTracking }) =
                 ))}
               </div>
 
-              {/* Promo Coupon Input */}
-              <div className="p-3.5 rounded-xl bg-[#FDF6F6] border border-[#C89D7C]/25 space-y-2">
-                <label className="flex items-center gap-1.5 text-xs font-semibold text-[#1E1116]">
-                  <Tag className="w-3.5 h-3.5 text-[#C89D7C]" />
-                  <span>Have a Promo Code?</span>
-                </label>
+              {/* Promo Coupon Input & 1-Tap Available Coupons */}
+              <div className="p-3.5 rounded-xl bg-[#FDF6F6] border border-[#C89D7C]/30 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-1.5 text-xs font-semibold text-[#1E1116]">
+                    <Tag className="w-3.5 h-3.5 text-[#C89D7C]" />
+                    <span>Have a Promo Code?</span>
+                  </label>
+                  {appliedCouponCode && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAppliedCouponCode('');
+                        setCouponInput('');
+                        setCouponFeedback(null);
+                      }}
+                      className="text-[11px] font-semibold text-red-600 hover:underline cursor-pointer"
+                    >
+                      Remove ({appliedCouponCode})
+                    </button>
+                  )}
+                </div>
+
                 <div className="flex gap-2">
                   <input
                     type="text"
+                    data-testid="cart-coupon-input"
                     value={couponInput}
                     onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
-                    placeholder="Enter coupon code"
+                    placeholder="Enter promo code (e.g. WELCOME10)"
                     className="flex-1 px-3 py-2 text-xs bg-[#FFFDFB] border border-[#1E1116]/15 rounded-lg uppercase font-mono-num focus:outline-none focus:border-[#C89D7C]"
                   />
                   <button
                     type="button"
+                    data-testid="cart-apply-coupon-btn"
                     onClick={handleApplyCoupon}
                     className="px-4 py-2 bg-[#1E1116] text-[#FFFDFB] text-xs font-semibold rounded-lg hover:bg-[#C89D7C] hover:text-[#1E1116] transition-colors cursor-pointer"
                   >
                     Apply
                   </button>
                 </div>
+
                 {couponFeedback && (
                   <p
-                    className={`text-[11px] font-medium ${
+                    data-testid="cart-coupon-feedback"
+                    className={`text-[11px] font-semibold ${
                       couponFeedback.type === 'ok' ? 'text-emerald-700' : 'text-red-600'
                     }`}
                   >
                     {couponFeedback.msg}
                   </p>
+                )}
+
+                {activeCoupons.length > 0 && (
+                  <div className="pt-1.5 border-t border-[#1E1116]/10 space-y-1.5">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-[#C89D7C]">
+                      Available Store Offers (Tap to Apply):
+                    </p>
+                    <div className="space-y-1.5">
+                      {activeCoupons.map((cpn) => {
+                        const isApplied =
+                          appliedCouponCode.toUpperCase() === cpn.code.toUpperCase();
+                        return (
+                          <div
+                            key={cpn.id}
+                            className="p-2 rounded-lg bg-[#FFFDFB] border border-[#C89D7C]/35 flex items-center justify-between gap-2"
+                          >
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-mono-num text-xs font-bold text-[#1E1116] bg-[#FDF6F6] px-2 py-0.5 rounded border border-[#C89D7C]/40">
+                                  {cpn.code}
+                                </span>
+                                <span className="text-[11px] font-bold text-emerald-700">
+                                  {cpn.type === 'PERCENT'
+                                    ? `${cpn.value}% OFF`
+                                    : `Flat ₹${cpn.value} OFF`}
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-[#1E1116]/65 truncate mt-0.5">
+                                {cpn.description ||
+                                  (cpn.minOrderAmount > 0
+                                    ? `Valid on orders above ₹${cpn.minOrderAmount}`
+                                    : 'No minimum order required')}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              data-testid={`apply-coupon-chip-${cpn.code}`}
+                              onClick={() => applySpecificCoupon(cpn.code)}
+                              className={`px-2.5 py-1 rounded-md text-[11px] font-semibold shrink-0 cursor-pointer ${
+                                isApplied
+                                  ? 'bg-emerald-700 text-white'
+                                  : 'bg-[#1E1116] text-[#FFFDFB] hover:bg-[#C89D7C] hover:text-[#1E1116]'
+                              }`}
+                            >
+                              {isApplied ? 'Applied ✓' : 'Apply'}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 )}
               </div>
 
@@ -422,7 +532,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onViewOrderTracking }) =
                   </div>
                 )}
                 {totals.discountAmount > 0 && (
-                  <div className="flex justify-between text-emerald-700">
+                  <div className="flex justify-between text-emerald-700 font-semibold">
                     <span>Promo Discount ({appliedCouponCode})</span>
                     <span className="font-mono-num">-₹{totals.discountAmount}</span>
                   </div>
@@ -445,17 +555,74 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onViewOrderTracking }) =
             /* Step 2: Checkout Form */
             <form id="checkout-form" onSubmit={handlePlaceOrder} className="space-y-4">
               {!currentCustomer && (
-                <div className="p-3 rounded-xl bg-[#FDF6F6] border border-[#C89D7C]/30 flex items-center justify-between gap-2 text-xs">
-                  <span className="text-[#1E1116]/80">Have a Girlz Zone account?</span>
+                <div className="p-3 rounded-xl bg-[#FDF6F6] border border-[#C89D7C]/30 space-y-2 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold text-[#1E1116]">
+                      Sign in for 1-Tap Auto-Fill Checkout:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsAuthModalOpen(true)}
+                      className="font-semibold text-[#C89D7C] underline cursor-pointer"
+                    >
+                      Phone / No-Password Login
+                    </button>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => setIsAuthModalOpen(true)}
-                    className="font-semibold text-[#C89D7C] underline cursor-pointer"
+                    onClick={async () => {
+                      try {
+                        await loginWithGoogle();
+                      } catch {
+                        setIsAuthModalOpen(true);
+                      }
+                    }}
+                    className="w-full py-2 px-3 rounded-lg bg-white border border-[#1E1116]/15 hover:border-[#C89D7C] text-[#1E1116] text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    Login to Auto-Fill
+                    <span>Continue with Google / Gmail</span>
                   </button>
                 </div>
               )}
+
+              {/* Promo Code Box also available on Checkout Step */}
+              <div className="p-3 rounded-xl bg-[#FDF6F6] border border-[#C89D7C]/25 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-[#1E1116] flex items-center gap-1.5">
+                    <Tag className="w-3.5 h-3.5 text-[#C89D7C]" />
+                    <span>Promo Code Discount</span>
+                  </span>
+                  {totals.discountAmount > 0 && (
+                    <span className="text-emerald-700 font-bold font-mono-num">
+                      -₹{totals.discountAmount} Saved ({appliedCouponCode})
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={couponInput}
+                    onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                    placeholder="Enter Promo Code"
+                    className="flex-1 px-3 py-1.5 text-xs bg-[#FFFDFB] border border-[#1E1116]/15 rounded-lg uppercase font-mono-num"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleApplyCoupon}
+                    className="px-3.5 py-1.5 bg-[#1E1116] text-[#FFFDFB] text-xs font-semibold rounded-lg cursor-pointer"
+                  >
+                    Apply
+                  </button>
+                </div>
+                {couponFeedback && (
+                  <p
+                    className={`text-[11px] font-medium ${
+                      couponFeedback.type === 'ok' ? 'text-emerald-700' : 'text-red-600'
+                    }`}
+                  >
+                    {couponFeedback.msg}
+                  </p>
+                )}
+              </div>
 
               {formError && (
                 <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs font-medium">

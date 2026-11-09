@@ -10,6 +10,29 @@ export const BUNDLED_IMAGES = {
   boutique: editorialBoutiqueImg,
 };
 
+export const CATEGORY_IMAGE_PRESETS = [
+  {
+    id: 'cosmetics',
+    label: 'Luxury Cosmetics & Lipstick',
+    url: heroCosmeticsImg,
+  },
+  {
+    id: 'jewellery',
+    label: '18K Gold & Jewellery',
+    url: heroJewelleryImg,
+  },
+  {
+    id: 'fragrance',
+    label: 'Fine Perfume & Fragrance',
+    url: heroFragranceImg,
+  },
+  {
+    id: 'boutique',
+    label: 'Beauty & Glamour Studio',
+    url: editorialBoutiqueImg,
+  },
+];
+
 export const CATEGORY_FALLBACK_IMAGES: Record<string, string> = {
   'Cosmetic Products': heroCosmeticsImg,
   'Beauty Products': editorialBoutiqueImg,
@@ -20,6 +43,59 @@ export const CATEGORY_FALLBACK_IMAGES: Record<string, string> = {
   'Deo And Perfume': heroFragranceImg,
 };
 
+export function getFallbackImageForCategory(category?: string): string {
+  if (!category) return BUNDLED_IMAGES.cosmetics;
+  if (CATEGORY_FALLBACK_IMAGES[category]) {
+    return CATEGORY_FALLBACK_IMAGES[category];
+  }
+  const lower = category.toLowerCase();
+  if (
+    lower.includes('jewel') ||
+    lower.includes('ring') ||
+    lower.includes('neck') ||
+    lower.includes('earring') ||
+    lower.includes('bangle') ||
+    lower.includes('bracelet') ||
+    lower.includes('pendant') ||
+    lower.includes('chain') ||
+    lower.includes('anklet') ||
+    lower.includes('bridal') ||
+    lower.includes('gold') ||
+    lower.includes('tarnish') ||
+    lower.includes('accessor') ||
+    lower.includes('clip') ||
+    lower.includes('watch')
+  ) {
+    return BUNDLED_IMAGES.jewellery;
+  }
+  if (
+    lower.includes('perfume') ||
+    lower.includes('deo') ||
+    lower.includes('fragrance') ||
+    lower.includes('mist') ||
+    lower.includes('scent') ||
+    lower.includes('attar') ||
+    lower.includes('aroma')
+  ) {
+    return BUNDLED_IMAGES.fragrance;
+  }
+  if (
+    lower.includes('hair') ||
+    lower.includes('beauty') ||
+    lower.includes('gift') ||
+    lower.includes('combo') ||
+    lower.includes('hamper') ||
+    lower.includes('bag') ||
+    lower.includes('pouch') ||
+    lower.includes('nail') ||
+    lower.includes('tool') ||
+    lower.includes('brush')
+  ) {
+    return BUNDLED_IMAGES.boutique;
+  }
+  return BUNDLED_IMAGES.cosmetics;
+}
+
 /**
  * Resolves any stored image URL so that:
  * 1. Legacy `/src/assets/images/...` paths stored in Firebase work on Vercel production builds (`dist/assets/...`).
@@ -28,8 +104,7 @@ export const CATEGORY_FALLBACK_IMAGES: Record<string, string> = {
  * 4. Empty or invalid URLs fall back to the category's bundled luxury asset.
  */
 export function resolveImageUrl(rawUrl?: string | null, category?: string): string {
-  const fallback =
-    (category && CATEGORY_FALLBACK_IMAGES[category]) || BUNDLED_IMAGES.cosmetics;
+  const fallback = getFallbackImageForCategory(category);
 
   if (!rawUrl || typeof rawUrl !== 'string') {
     return fallback;
@@ -79,8 +154,7 @@ export function handleImageFallback(
   category?: string
 ): void {
   const target = e.currentTarget;
-  const fallback =
-    (category && CATEGORY_FALLBACK_IMAGES[category]) || BUNDLED_IMAGES.cosmetics;
+  const fallback = getFallbackImageForCategory(category);
   if (target.src !== fallback && !target.dataset.fallbackApplied) {
     target.dataset.fallbackApplied = 'true';
     target.src = fallback;

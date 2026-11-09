@@ -24,6 +24,8 @@ import {
 } from '../utils/commerce';
 import {
   auth,
+  GoogleAuthProvider,
+  signInWithPopup,
   createUserWithEmailAndPassword,
   db,
   firebaseSignOut,
@@ -93,9 +95,59 @@ const DEFAULT_STORE_CONFIG: StoreConfig = {
   adminId: 'admin@girlzzone.com',
   adminEmail: 'admin@girlzzone.com',
   adminPassword: 'GirlzZone@123',
+
+  // Active Storefront Template & Theme Customization
+  activeTemplate: 'prestige',
+  themePreset: 'rosegold_pearl',
+  themeBgPrimary: '#FFFDFB',
+  themeBgSecondary: '#FDF6F6',
+  themeTextPrimary: '#1E1116',
+  themeAccentPrimary: '#C89D7C',
+  themeAccentSecondary: '#D4AF37',
+
+  // Full Message & Copy Control Center
+  welcomeBannerActive: false,
+  welcomeBannerText:
+    'Special Boutique Privilege: Visit Girlz Zone at Palegaon, Ambernath or order online for express doorstep delivery!',
+  catalogSectionKicker: 'Girlz Zone Flagship Catalog',
+  catalogSectionTitle: 'Curated Luxury Collections',
+  emptyCatalogTitle: 'New Collection Launching Soon — Stay Tuned!',
+  emptyCatalogSubtitle:
+    'We are curating our latest arrivals across Cosmetics, Beauty Products, Skin Care, Hair Care, Hair Accessories, Anti Tarnish Jewellery, and Fine Perfumes.',
+  boutiqueSectionKicker: 'Ambernath Flagship Experience',
+  boutiqueSectionTitle: 'Visit Girlz Zone at Palegaon, Ambernath',
+  boutiqueSectionSubtitle:
+    'Experience our luxury range in person or order online with instant WhatsApp invoice confirmation and live Flipkart-style order tracking right to your doorstep.',
+  footerTagline:
+    'Your premier destination in Ambernath for luxury cosmetics, beauty essentials, skin care, hair accessories, 18K anti-tarnish jewellery, and fine perfumes.',
+  orderConfirmationMessage:
+    'Your order has been registered in real time. You can send the formatted invoice to Girlz Zone on WhatsApp or track your live delivery status below.',
+  whatsappGeneralInquiryMessage:
+    'Hello Girlz Zone! Please notify me about your new collection launch.',
+  whatsappProductInquiryTemplate:
+    'Hello Girlz Zone! I would like to inquire about *{productName}* (₹{price}) in {category}.',
+  whatsappOrderInvoiceHeader:
+    'Hello *Girlz Zone*! I have placed a new order on your website.',
+  whatsappOrderInvoiceFooter: 'Please confirm my order. Thank you!',
+  whatsappTrackingUpdateIntro:
+    'Hello *{customerName}*, here is the live update for your *Girlz Zone* order *{orderId}*:',
+  whatsappTrackingUpdateOutro: 'Thank you for shopping with Girlz Zone, Ambernath!',
 };
 
 const CATEGORY_COVER_IMAGES: Record<string, string> = CATEGORY_FALLBACK_IMAGES;
+
+const INITIAL_DEFAULT_CATEGORIES: Category[] = DEFAULT_CATEGORY_NAMES.map((name, idx) => {
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  return {
+    id: `cat_${idx + 1}_${slug}`,
+    name,
+    slug,
+    image: CATEGORY_COVER_IMAGES[name] || DEFAULT_HERO_BANNERS[0].image,
+    order: idx + 1,
+    visible: true,
+    createdAt: 1700000000000 + idx,
+  };
+});
 
 function simpleHash(input: string): string {
   let hash = 5381;
@@ -126,7 +178,11 @@ interface StoreContextType {
   clearCart: () => void;
   toggleWishlist: (productId: string) => void;
 
-  // Customer Auth
+  // Promo Code Quick Selection from Storefront
+  selectedPromoCode: string;
+  setSelectedPromoCode: (code: string) => void;
+
+  // Customer Auth (Email/Phone + Password, Google Login, and Passwordless Quick Login)
   currentCustomer: CustomerUser | null;
   isAuthModalOpen: boolean;
   setIsAuthModalOpen: (open: boolean) => void;
@@ -138,6 +194,12 @@ interface StoreContextType {
     address: DeliveryAddress;
   }) => Promise<CustomerUser>;
   loginCustomer: (identifier: string, password: string) => Promise<CustomerUser>;
+  loginWithGoogle: () => Promise<CustomerUser>;
+  loginWithoutPassword: (params: {
+    phone: string;
+    fullName?: string;
+    address?: DeliveryAddress;
+  }) => Promise<CustomerUser>;
   logoutCustomer: () => Promise<void>;
   updateCustomerProfile: (updated: { fullName: string; phone: string; address: DeliveryAddress }) => Promise<void>;
 
@@ -159,6 +221,7 @@ interface StoreContextType {
   // Admin Operations
   isAdminAuthenticated: boolean;
   loginAdmin: (idOrEmail: string, password: string) => boolean;
+  loginAdminWithGoogle: () => Promise<boolean>;
   logoutAdmin: () => void;
   saveProduct: (productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt' | 'discountPercent'>, existingId?: string) => Promise<void>;
   deleteProduct: (productId: string) => Promise<void>;
@@ -173,8 +236,10 @@ interface StoreContextType {
     trackingNote?: string;
     cancelReason?: string;
   }) => Promise<void>;
-  saveCategory: (catData: { name: string; image: string; visible: boolean; order: number }, existingId?: string) => Promise<void>;
+  saveCategory: (catData: { name: string; image: string; visible: boolean; order: number }, existingId?: string) => Promise<Category>;
   deleteCategory: (categoryId: string) => Promise<void>;
+  reorderCategory: (categoryId: string, direction: 'UP' | 'DOWN') => Promise<void>;
+  restoreDefaultCategories: () => Promise<void>;
   saveBanner: (bannerData: Omit<HeroBanner, 'id'>, existingId?: string) => Promise<void>;
   deleteBanner: (bannerId: string) => Promise<void>;
   saveCoupon: (couponData: Omit<Coupon, 'id'>, existingId?: string) => Promise<void>;
@@ -185,7 +250,7 @@ interface StoreContextType {
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
 export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [categories, setCategories] = useState<Category[]>(INITIAL_DEFAULT_CATEGORIES);
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [customers, setCustomers] = useState<CustomerUser[]>([]);
@@ -214,6 +279,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [selectedPromoCode, setSelectedPromoCode] = useState('');
 
   const [currentCustomer, setCurrentCustomer] = useState<CustomerUser | null>(() => {
     try {
@@ -244,6 +310,23 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       // Ignore storage error
     }
   }, [wishlist]);
+
+  // Apply Global Storefront Color Theme to CSS Custom Properties
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    root.style.setProperty('--gz-bg', storeConfig.themeBgPrimary || '#FFFDFB');
+    root.style.setProperty('--gz-surface', storeConfig.themeBgSecondary || '#FDF6F6');
+    root.style.setProperty('--gz-text', storeConfig.themeTextPrimary || '#1E1116');
+    root.style.setProperty('--gz-accent', storeConfig.themeAccentPrimary || '#C89D7C');
+    root.style.setProperty('--gz-gold', storeConfig.themeAccentSecondary || '#D4AF37');
+  }, [
+    storeConfig.themeBgPrimary,
+    storeConfig.themeBgSecondary,
+    storeConfig.themeTextPrimary,
+    storeConfig.themeAccentPrimary,
+    storeConfig.themeAccentSecondary,
+  ]);
 
   // Real-time Firebase Subscriptions (Strict 0 Products / 0 Orders / ₹0 Revenue rule)
   useEffect(() => {
@@ -571,6 +654,169 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return matchedUser;
   };
 
+  // 1-Click Gmail / Google Sign-In
+  const loginWithGoogle = async (): Promise<CustomerUser> => {
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    const cred = await signInWithPopup(auth, provider);
+    const gUser = cred.user;
+    const cleanEmail = (gUser.email || `${gUser.uid}@gmail.com`).trim().toLowerCase().slice(0, 180);
+    const cleanName = (
+      gUser.displayName ||
+      cleanEmail.split('@')[0] ||
+      'Girlz Zone Customer'
+    )
+      .trim()
+      .slice(0, 120);
+    const cleanPhone = normalizePhone(gUser.phoneNumber || '').slice(0, 10);
+    const safeUid = gUser.uid.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 100);
+
+    // Check if user record already exists by UID or email
+    const existingSnap = await getOnce(ref(db, `users/${safeUid}`));
+    if (existingSnap.exists()) {
+      const existingData = existingSnap.val() as CustomerUser;
+      setCurrentCustomer(existingData);
+      localStorage.setItem('gz_customer', JSON.stringify(existingData));
+      return existingData;
+    }
+
+    const existingByEmail = customers.find(
+      (c) => c.email && c.email.toLowerCase() === cleanEmail
+    );
+    if (existingByEmail) {
+      setCurrentCustomer(existingByEmail);
+      localStorage.setItem('gz_customer', JSON.stringify(existingByEmail));
+      return existingByEmail;
+    }
+
+    const now = Date.now();
+    const newRecord: CustomerUser = {
+      uid: safeUid,
+      fullName: cleanName,
+      phone: cleanPhone,
+      email: cleanEmail,
+      address: {
+        houseFlatNo: '',
+        buildingStreet: '',
+        areaLocality: '',
+        landmark: '',
+        city: 'Ambernath',
+        state: 'Maharashtra',
+        pincode: '421501',
+      },
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await set(ref(db, `users/${safeUid}`), newRecord);
+    if (cleanPhone.length === 10) {
+      await set(ref(db, `phoneLookup/${cleanPhone}`), {
+        phone: cleanPhone,
+        email: cleanEmail,
+        uid: safeUid,
+      });
+    }
+
+    setCurrentCustomer(newRecord);
+    localStorage.setItem('gz_customer', JSON.stringify(newRecord));
+    return newRecord;
+  };
+
+  // Instant Passwordless Login (Without ID / Password — 10-Digit Mobile + Name)
+  const loginWithoutPassword = async (params: {
+    phone: string;
+    fullName?: string;
+    address?: DeliveryAddress;
+  }): Promise<CustomerUser> => {
+    const cleanPhone = normalizePhone(params.phone);
+    if (cleanPhone.length !== 10) {
+      throw new Error('Please enter a valid 10-Digit Mobile Number.');
+    }
+
+    // 1. Check if customer already exists in /phoneLookup or customers list
+    const lookupSnap = await getOnce(ref(db, `phoneLookup/${cleanPhone}`));
+    if (lookupSnap.exists()) {
+      const lookup = lookupSnap.val();
+      if (lookup?.uid) {
+        const userSnap = await getOnce(ref(db, `users/${lookup.uid}`));
+        if (userSnap.exists()) {
+          const existingUser = userSnap.val() as CustomerUser;
+          const updatedName = params.fullName?.trim() || existingUser.fullName;
+          const updatedUser: CustomerUser = {
+            ...existingUser,
+            fullName: updatedName,
+            address: params.address || existingUser.address,
+            updatedAt: Date.now(),
+          };
+          await set(ref(db, `users/${existingUser.uid}`), updatedUser);
+          setCurrentCustomer(updatedUser);
+          localStorage.setItem('gz_customer', JSON.stringify(updatedUser));
+          return updatedUser;
+        }
+      }
+    }
+
+    const foundInMemory = customers.find((u) => u.phone === cleanPhone);
+    if (foundInMemory) {
+      const updatedUser: CustomerUser = {
+        ...foundInMemory,
+        fullName: params.fullName?.trim() || foundInMemory.fullName,
+        address: params.address || foundInMemory.address,
+        updatedAt: Date.now(),
+      };
+      await set(ref(db, `users/${foundInMemory.uid}`), updatedUser);
+      setCurrentCustomer(updatedUser);
+      localStorage.setItem('gz_customer', JSON.stringify(updatedUser));
+      return updatedUser;
+    }
+
+    // 2. Check if customer placed a past order with this phone number to auto-fill their details
+    const pastOrder = orders.find((o) => o.customerPhone === cleanPhone);
+    const now = Date.now();
+    const uid = `usr_quick_${cleanPhone}`;
+    const finalName = (
+      params.fullName?.trim() ||
+      pastOrder?.customerName ||
+      `Customer ${cleanPhone.slice(-4)}`
+    ).slice(0, 120);
+    const finalEmail = (
+      pastOrder?.customerEmail || `${cleanPhone}@girlzzone.customer`
+    )
+      .toLowerCase()
+      .slice(0, 180);
+    const finalAddress: DeliveryAddress = params.address ||
+      pastOrder?.deliveryAddress || {
+        houseFlatNo: '',
+        buildingStreet: '',
+        areaLocality: '',
+        landmark: '',
+        city: 'Ambernath',
+        state: 'Maharashtra',
+        pincode: '421501',
+      };
+
+    const quickUser: CustomerUser = {
+      uid,
+      fullName: finalName,
+      phone: cleanPhone,
+      email: finalEmail,
+      address: finalAddress,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await set(ref(db, `users/${uid}`), quickUser);
+    await set(ref(db, `phoneLookup/${cleanPhone}`), {
+      phone: cleanPhone,
+      email: finalEmail,
+      uid,
+    });
+
+    setCurrentCustomer(quickUser);
+    localStorage.setItem('gz_customer', JSON.stringify(quickUser));
+    return quickUser;
+  };
+
   const logoutCustomer = async () => {
     try {
       await firebaseSignOut(auth);
@@ -693,6 +939,18 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return false;
   };
 
+  const loginAdminWithGoogle = async (): Promise<boolean> => {
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    const cred = await signInWithPopup(auth, provider);
+    if (cred.user) {
+      setIsAdminAuthenticated(true);
+      sessionStorage.setItem('gz_admin_auth', 'true');
+      return true;
+    }
+    return false;
+  };
+
   const logoutAdmin = () => {
     setIsAdminAuthenticated(false);
     sessionStorage.removeItem('gz_admin_auth');
@@ -789,26 +1047,101 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const saveCategory = async (
     catData: { name: string; image: string; visible: boolean; order: number },
     existingId?: string
-  ) => {
+  ): Promise<Category> => {
     const now = Date.now();
-    const slug = catData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const cleanName = catData.name.trim();
+    const rawSlug = cleanName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    const slug = (rawSlug || 'category').slice(0, 48);
     const id = existingId || `cat_${now}_${slug}`;
     const existing = categories.find((c) => c.id === existingId);
 
     const record: Category = {
       id,
-      name: catData.name.trim(),
+      name: cleanName,
       slug,
-      image: catData.image || DEFAULT_HERO_BANNERS[0].image,
+      image: resolveImageUrl(catData.image, cleanName),
       order: catData.order,
       visible: catData.visible,
       createdAt: existing?.createdAt || now,
     };
+
+    // Optimistic local state update for instant UI responsiveness
+    setCategories((prev) => {
+      const without = prev.filter((c) => c.id !== id);
+      return [...without, record].sort((a, b) => a.order - b.order);
+    });
+
     await set(ref(db, `categories/${id}`), record);
+
+    // If renaming an existing category, sync any products & banners referencing the old name
+    if (existing && existing.name !== cleanName) {
+      for (const prod of products) {
+        if (prod.category === existing.name) {
+          await update(ref(db, `products/${prod.id}`), {
+            category: cleanName,
+            updatedAt: now,
+          });
+        }
+      }
+      for (const banner of banners) {
+        if (banner.ctaCategory === existing.name) {
+          await update(ref(db, `banners/${banner.id}`), {
+            ctaCategory: cleanName,
+          });
+        }
+      }
+    }
+
+    return record;
   };
 
   const deleteCategory = async (categoryId: string) => {
+    setCategories((prev) => prev.filter((c) => c.id !== categoryId));
     await remove(ref(db, `categories/${categoryId}`));
+  };
+
+  const reorderCategory = async (categoryId: string, direction: 'UP' | 'DOWN') => {
+    const sorted = [...categories].sort((a, b) => a.order - b.order);
+    const idx = sorted.findIndex((c) => c.id === categoryId);
+    if (idx === -1) return;
+    const swapIdx = direction === 'UP' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= sorted.length) return;
+
+    const current = sorted[idx];
+    const target = sorted[swapIdx];
+    const currentOrder = idx + 1;
+    const targetOrder = swapIdx + 1;
+
+    const updatedCurrent: Category = { ...current, order: targetOrder };
+    const updatedTarget: Category = { ...target, order: currentOrder };
+
+    await set(ref(db, `categories/${updatedCurrent.id}`), updatedCurrent);
+    await set(ref(db, `categories/${updatedTarget.id}`), updatedTarget);
+  };
+
+  const restoreDefaultCategories = async () => {
+    const existingNames = new Set(categories.map((c) => c.name.toLowerCase()));
+    let nextOrder = categories.length + 1;
+    for (let i = 0; i < DEFAULT_CATEGORY_NAMES.length; i++) {
+      const name = DEFAULT_CATEGORY_NAMES[i];
+      if (!existingNames.has(name.toLowerCase())) {
+        const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        const id = `cat_${i + 1}_${slug}`;
+        const cat: Category = {
+          id,
+          name,
+          slug,
+          image: CATEGORY_COVER_IMAGES[name] || DEFAULT_HERO_BANNERS[0].image,
+          order: nextOrder++,
+          visible: true,
+          createdAt: Date.now(),
+        };
+        await set(ref(db, `categories/${cat.id}`), cat);
+      }
+    }
   };
 
   const saveBanner = async (bannerData: Omit<HeroBanner, 'id'>, existingId?: string) => {
@@ -859,16 +1192,21 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         removeFromCart,
         clearCart,
         toggleWishlist,
+        selectedPromoCode,
+        setSelectedPromoCode,
         currentCustomer,
         isAuthModalOpen,
         setIsAuthModalOpen,
         registerCustomer,
         loginCustomer,
+        loginWithGoogle,
+        loginWithoutPassword,
         logoutCustomer,
         updateCustomerProfile,
         placeOrder,
         isAdminAuthenticated,
         loginAdmin,
+        loginAdminWithGoogle,
         logoutAdmin,
         saveProduct,
         deleteProduct,
@@ -877,6 +1215,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         updateOrderStatus,
         saveCategory,
         deleteCategory,
+        reorderCategory,
+        restoreDefaultCategories,
         saveBanner,
         deleteBanner,
         saveCoupon,

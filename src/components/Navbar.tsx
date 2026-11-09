@@ -13,6 +13,8 @@ import {
 import { useStore } from '../context/StoreContext';
 import { Product } from '../types';
 
+import { handleImageFallback, resolveImageUrl } from '../utils/images';
+
 interface NavbarProps {
   activeView: 'home' | 'categories' | 'track' | 'wishlist';
   setActiveView: (view: 'home' | 'categories' | 'track' | 'wishlist') => void;
@@ -115,7 +117,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               All Collections
             </button>
-            {visibleCategories.slice(0, 3).map((cat) => (
+            <button
+              type="button"
+              onClick={() => setActiveView('categories')}
+              className={`hover:text-[#1E1116] transition-colors whitespace-nowrap shrink-0 pb-1 border-b-2 cursor-pointer ${
+                activeView === 'categories'
+                  ? 'border-[#C89D7C] text-[#1E1116] font-semibold'
+                  : 'border-transparent'
+              }`}
+            >
+              Shop Categories ({visibleCategories.length})
+            </button>
+            {visibleCategories.slice(0, 2).map((cat) => (
               <button
                 key={cat.id}
                 type="button"
@@ -190,9 +203,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                           className="w-full flex items-center gap-3 p-3 hover:bg-[#FDF6F6] transition-colors text-left"
                         >
                           <img
-                            src={prod.images?.[0]}
+                            src={resolveImageUrl(prod.images?.[0], prod.category)}
                             alt={prod.name}
-                            referrerPolicy="no-referrer"
+                            onError={(e) => handleImageFallback(e, prod.category)}
                             className="w-11 h-11 rounded-lg object-cover bg-[#FDF6F6] shrink-0"
                           />
                           <div className="min-w-0 flex-1">
@@ -257,40 +270,49 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        {/* Desktop Secondary Full 7-Category Strip */}
+        {/* Desktop Secondary Dynamic Category Ribbon with Thumbnails */}
         <div className="bg-[#FDF6F6]/70 border-t border-[#1E1116]/5">
-          <div className="max-w-7xl mx-auto px-6 py-2.5 flex items-center gap-6 overflow-x-auto no-scrollbar text-xs">
+          <div className="max-w-7xl mx-auto px-6 py-2 flex items-center gap-5 overflow-x-auto no-scrollbar text-xs">
             <button
               type="button"
               onClick={() => {
                 setActiveView('home');
                 setSelectedCategory('ALL');
               }}
-              className={`whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+              className={`whitespace-nowrap shrink-0 py-1 transition-colors cursor-pointer ${
                 selectedCategory === 'ALL' && activeView === 'home'
                   ? 'text-[#1E1116] font-semibold underline underline-offset-4 decoration-[#C89D7C]'
                   : 'text-[#1E1116]/70 hover:text-[#1E1116]'
               }`}
             >
-              All 7 Categories
+              All Categories ({visibleCategories.length})
             </button>
-            {visibleCategories.map((cat) => (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => {
-                  setActiveView('home');
-                  setSelectedCategory(cat.name);
-                }}
-                className={`whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
-                  selectedCategory === cat.name && activeView === 'home'
-                    ? 'text-[#1E1116] font-semibold underline underline-offset-4 decoration-[#C89D7C]'
-                    : 'text-[#1E1116]/70 hover:text-[#1E1116]'
-                }`}
-              >
-                {cat.name}
-              </button>
-            ))}
+            {visibleCategories.map((cat) => {
+              const isSelected = selectedCategory === cat.name && activeView === 'home';
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => {
+                    setActiveView('home');
+                    setSelectedCategory(cat.name);
+                  }}
+                  className={`inline-flex items-center gap-2 whitespace-nowrap shrink-0 py-1 transition-colors cursor-pointer ${
+                    isSelected
+                      ? 'text-[#1E1116] font-semibold underline underline-offset-4 decoration-[#C89D7C]'
+                      : 'text-[#1E1116]/75 hover:text-[#1E1116]'
+                  }`}
+                >
+                  <img
+                    src={resolveImageUrl(cat.image, cat.name)}
+                    alt={cat.name}
+                    onError={(e) => handleImageFallback(e, cat.name)}
+                    className="w-5 h-5 rounded-full object-cover border border-[#C89D7C]/40 shrink-0"
+                  />
+                  <span>{cat.name}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
       </header>

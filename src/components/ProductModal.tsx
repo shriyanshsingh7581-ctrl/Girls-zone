@@ -3,6 +3,7 @@ import { X, ShoppingBag, Heart, MessageCircle, ShieldCheck, MapPin } from 'lucid
 import { Product } from '../types';
 import { useStore } from '../context/StoreContext';
 import { handleImageFallback, resolveImageUrl } from '../utils/images';
+import { buildProductInquiryWhatsAppUrl } from '../utils/commerce';
 
 interface ProductModalProps {
   product: Product | null;
@@ -27,11 +28,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onClose }) 
 
   const isWishlisted = wishlist.includes(product.id);
 
-  const waUrl = `https://wa.me/${storeConfig.whatsappNumber.replace(/\D/g, '')}?text=${encodeURIComponent(
-    `Hello Girlz Zone! I would like to inquire about *${product.name}* (₹${product.price})${
-      activeVariant ? ` - Variant: ${activeVariant}` : ''
-    }.`
-  )}`;
+  const waUrl = buildProductInquiryWhatsAppUrl(product, activeVariant || undefined, storeConfig);
 
   return (
     <div

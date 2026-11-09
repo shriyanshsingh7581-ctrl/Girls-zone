@@ -2,19 +2,20 @@
 
 @layer base {
   :root {
-    --bg-pearl: #FFFDFB;
-    --bg-blush: #FDF6F6;
-    --text-velvet: #1E1116;
-    --accent-rosegold: #C89D7C;
-    --accent-champagne: #D4AF37;
+    --gz-bg: #FFFDFB;
+    --gz-surface: #FDF6F6;
+    --gz-text: #1E1116;
+    --gz-accent: #C89D7C;
+    --gz-gold: #D4AF37;
   }
 
   body {
-    background-color: #FFFDFB;
-    color: #1E1116;
+    background-color: var(--gz-bg);
+    color: var(--gz-text);
     font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
     -webkit-font-smoothing: antialiased;
     overflow-x: hidden;
+    transition: background-color 0.25s ease, color 0.25s ease;
   }
 
   h1, h2, h3, .font-serif-luxury {
@@ -25,6 +26,52 @@
     font-family: 'JetBrains Mono', monospace;
     font-variant-numeric: tabular-nums;
   }
+}
+
+/* Dynamic Theme Binding inside Storefront Scope (.gz-theme-scope) */
+.gz-theme-scope {
+  background-color: var(--gz-bg);
+  color: var(--gz-text);
+}
+
+.gz-theme-scope .bg-\[\#FFFDFB\] {
+  background-color: var(--gz-bg) !important;
+}
+.gz-theme-scope .bg-\[\#FFFDFB\]\/95 {
+  background-color: color-mix(in srgb, var(--gz-bg) 95%, transparent) !important;
+}
+.gz-theme-scope .bg-\[\#FDF6F6\],
+.gz-theme-scope .bg-\[\#FDF6F6\]\/70,
+.gz-theme-scope .bg-\[\#FDF6F6\]\/60 {
+  background-color: var(--gz-surface) !important;
+}
+.gz-theme-scope .bg-\[\#1E1116\] {
+  background-color: var(--gz-text) !important;
+}
+.gz-theme-scope .text-\[\#1E1116\] {
+  color: var(--gz-text) !important;
+}
+.gz-theme-scope .text-\[\#FFFDFB\] {
+  color: var(--gz-bg) !important;
+}
+.gz-theme-scope .bg-\[\#C89D7C\] {
+  background-color: var(--gz-accent) !important;
+}
+.gz-theme-scope .text-\[\#C89D7C\] {
+  color: var(--gz-accent) !important;
+}
+.gz-theme-scope .border-\[\#C89D7C\],
+.gz-theme-scope .border-\[\#C89D7C\]\/30,
+.gz-theme-scope .border-\[\#C89D7C\]\/35,
+.gz-theme-scope .border-\[\#C89D7C\]\/40,
+.gz-theme-scope .border-\[\#C89D7C\]\/50 {
+  border-color: color-mix(in srgb, var(--gz-accent) 45%, transparent) !important;
+}
+.gz-theme-scope .text-\[\#D4AF37\] {
+  color: var(--gz-gold) !important;
+}
+.gz-theme-scope .bg-\[\#D4AF37\] {
+  background-color: var(--gz-gold) !important;
 }
 
 @keyframes marquee {
