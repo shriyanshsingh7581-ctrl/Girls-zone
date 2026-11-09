@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, ShoppingBag, Heart, MessageCircle, ShieldCheck, MapPin } from 'lucide-react';
 import { Product } from '../types';
 import { useStore } from '../context/StoreContext';
@@ -15,6 +15,12 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onClose }) 
   const [selectedImageIdx, setSelectedImageIdx] = useState(0);
   const [selectedVariant, setSelectedVariant] = useState<string>('');
   const [quantity, setQuantity] = useState(1);
+
+  useEffect(() => {
+    setSelectedImageIdx(0);
+    setSelectedVariant('');
+    setQuantity(1);
+  }, [product?.id]);
 
   if (!product) return null;
 

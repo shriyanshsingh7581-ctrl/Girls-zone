@@ -54,12 +54,14 @@ export const Navbar: React.FC<NavbarProps> = ({
   const searchResults =
     searchQuery.trim().length > 0
       ? products
-          .filter(
-            (p) =>
-              p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-              p.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-              p.description.toLowerCase().includes(searchQuery.toLowerCase())
-          )
+          .filter((p) => {
+            const q = searchQuery.toLowerCase();
+            return (
+              (p.name || '').toLowerCase().includes(q) ||
+              (p.category || '').toLowerCase().includes(q) ||
+              (p.description || '').toLowerCase().includes(q)
+            );
+          })
           .slice(0, 6)
       : [];
 

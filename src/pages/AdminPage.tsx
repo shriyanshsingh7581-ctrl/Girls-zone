@@ -134,6 +134,9 @@ export const AdminPage: React.FC = () => {
   const [prodVariants, setProdVariants] = useState('');
   const [prodDescription, setProdDescription] = useState('');
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [prodUploadError, setProdUploadError] = useState('');
+  const [prodUploadSuccess, setProdUploadSuccess] = useState('');
+  const [prodSavedMsg, setProdSavedMsg] = useState('');
   const [productSearch, setProductSearch] = useState('');
 
   // Orders Filter & Tracking Form State
@@ -327,6 +330,8 @@ export const AdminPage: React.FC = () => {
     setProdBadges([]);
     setProdVariants('');
     setProdDescription('');
+    setProdUploadError('');
+    setProdUploadSuccess('');
     setIsProductFormOpen(true);
   };
 
@@ -343,39 +348,59 @@ export const AdminPage: React.FC = () => {
     setProdBadges(prod.badges || []);
     setProdVariants((prod.variants || []).join(', '));
     setProdDescription(prod.description || '');
+    setProdUploadError('');
+    setProdUploadSuccess('');
     setIsProductFormOpen(true);
   };
 
   const handleCloudinaryProductUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) return;
+    const selectedFiles = Array.from(fileList);
+    // Reset input value immediately so selecting the same or another photo again always fires onChange
+    e.target.value = '';
+
+    setProdUploadError('');
+    setProdUploadSuccess('');
     try {
-      setUploadProgress(1);
-      const uploadedUrls = await uploadMultipleImagesToCloudinary(files, (pct) =>
+      setUploadProgress(5);
+      const uploadedUrls = await uploadMultipleImagesToCloudinary(selectedFiles, (pct) =>
         setUploadProgress(pct)
       );
-      setProdImages((prev) => [...prev, ...uploadedUrls]);
+      setProdImages((prev) => [...prev, ...uploadedUrls].slice(0, 6));
+      setProdUploadSuccess(
+        `${uploadedUrls.length} ${uploadedUrls.length === 1 ? 'photo' : 'photos'} uploaded & ready!`
+      );
     } catch (err: any) {
-      console.error('Upload error:', err);
+      setProdUploadError(
+        err?.message || 'Could not process selected photo. Please try a JPG/PNG/WebP image.'
+      );
     } finally {
-      setTimeout(() => setUploadProgress(null), 600);
+      setTimeout(() => setUploadProgress(null), 350);
     }
   };
 
   const handleSaveProductSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (uploadProgress !== null) return;
+    setProdUploadError('');
 
-    const numPrice = Number(prodPrice) || 0;
-    const numMrp = Number(prodMrp) || numPrice;
-    const numStock = Number(prodStockQty) || 0;
+    if (!prodName.trim()) {
+      setProdUploadError('Please enter a Product Name.');
+      return;
+    }
+
+    const numPrice = Math.max(0, Number(prodPrice) || 0);
+    const numMrp = Math.max(numPrice, Number(prodMrp) || numPrice);
+    const numStock = Math.max(0, Number(prodStockQty) || 0);
 
     const combinedUrls = [
       ...prodImages,
       ...(prodImageUrlInput.trim() ? [prodImageUrlInput.trim()] : []),
     ]
       .map((u) => resolveImageUrl(u, prodCategory))
-      .filter(Boolean);
+      .filter(Boolean)
+      .slice(0, 6);
 
     const finalImages =
       combinedUrls.length > 0 ? combinedUrls : [resolveImageUrl(undefined, prodCategory)];
@@ -385,23 +410,33 @@ export const AdminPage: React.FC = () => {
       .map((s) => s.trim())
       .filter(Boolean);
 
-    await saveProduct(
-      {
-        name: prodName.trim(),
-        category: prodCategory,
-        price: numPrice,
-        mrp: numMrp,
-        inStock: prodInStock && numStock > 0,
-        stockQuantity: prodInStock ? Math.max(1, numStock) : 0,
-        images: finalImages,
-        badges: prodBadges,
-        variants: parsedVariants,
-        bestseller: prodBadges.includes('Bestseller'),
-        description: prodDescription.trim(),
-      },
-      editingProductId
-    );
-    setIsProductFormOpen(false);
+    try {
+      await saveProduct(
+        {
+          name: prodName.trim(),
+          category: prodCategory,
+          price: numPrice,
+          mrp: numMrp,
+          inStock: prodInStock && numStock > 0,
+          stockQuantity: prodInStock ? Math.max(1, numStock) : 0,
+          images: finalImages,
+          badges: prodBadges,
+          variants: parsedVariants,
+          bestseller: prodBadges.includes('Bestseller'),
+          description: prodDescription.trim(),
+        },
+        editingProductId
+      );
+      setIsProductFormOpen(false);
+      setProdSavedMsg(
+        editingProductId
+          ? `Product "${prodName.trim()}" updated live on the website!`
+          : `Product "${prodName.trim()}" published live with ${finalImages.length} photo(s)!`
+      );
+      setTimeout(() => setProdSavedMsg(''), 4000);
+    } catch (err: any) {
+      setProdUploadError(err?.message || 'Failed to save product. Please try again.');
+    }
   };
 
   const filteredAdminOrders = orders.filter((ord) => {
@@ -1387,6 +1422,13 @@ export const AdminPage: React.FC = () => {
         {/* MODULE 2: PRODUCT CATALOG MANAGER */}
         {activeTab === 'products' && (
           <div className="space-y-5">
+            {prodSavedMsg && (
+              <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
+                <Check className="w-4 h-4" />
+                <span>{prodSavedMsg}</span>
+              </div>
+            )}
+
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="relative flex-1 max-w-md">
                 <Search className="w-4 h-4 text-[#1E1116]/45 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -1837,13 +1879,17 @@ export const AdminPage: React.FC = () => {
                         className="hidden"
                         onChange={async (e) => {
                           const f = e.target.files?.[0];
+                          e.target.value = '';
                           if (!f) return;
-                          setCatUploadProgress(5);
-                          const url = await uploadImageToCloudinary(f, (p) =>
-                            setCatUploadProgress(p)
-                          );
-                          setCatImage(url);
-                          setTimeout(() => setCatUploadProgress(null), 500);
+                          try {
+                            setCatUploadProgress(5);
+                            const url = await uploadImageToCloudinary(f, (p) =>
+                              setCatUploadProgress(p)
+                            );
+                            setCatImage(url);
+                          } finally {
+                            setTimeout(() => setCatUploadProgress(null), 400);
+                          }
                         }}
                       />
                     </label>
@@ -2252,13 +2298,17 @@ export const AdminPage: React.FC = () => {
                     className="hidden"
                     onChange={async (e) => {
                       const f = e.target.files?.[0];
+                      e.target.value = '';
                       if (!f) return;
-                      setBannerUploadProgress(10);
-                      const url = await uploadImageToCloudinary(f, (p) =>
-                        setBannerUploadProgress(p)
-                      );
-                      setBannerImage(url);
-                      setTimeout(() => setBannerUploadProgress(null), 500);
+                      try {
+                        setBannerUploadProgress(10);
+                        const url = await uploadImageToCloudinary(f, (p) =>
+                          setBannerUploadProgress(p)
+                        );
+                        setBannerImage(url);
+                      } finally {
+                        setTimeout(() => setBannerUploadProgress(null), 400);
+                      }
                     }}
                   />
                 </label>
@@ -2776,10 +2826,10 @@ export const AdminPage: React.FC = () => {
         )}
       </main>
 
-      {/* Mobile Fixed 6-Tab Bottom Navigation Bar for Admin (< 768px) */}
+      {/* Mobile Fixed 8-Tab Scrollable Bottom Navigation Bar for Admin (< 768px) */}
       <nav
         aria-label="Mobile admin navigation"
-        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#1E1116] text-[#FFFDFB] grid grid-cols-6 items-center h-14 px-1 border-t border-[#FFFDFB]/10"
+        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#1E1116] text-[#FFFDFB] flex items-center overflow-x-auto no-scrollbar h-14 px-2 gap-1 border-t border-[#FFFDFB]/10"
       >
         {[
           { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -2787,6 +2837,8 @@ export const AdminPage: React.FC = () => {
           { id: 'orders', label: 'Orders', icon: Package },
           { id: 'products', label: 'Products', icon: ShoppingBag },
           { id: 'categories', label: 'Categories', icon: Layers },
+          { id: 'banners', label: 'Banners', icon: ImageIcon },
+          { id: 'coupons', label: 'Coupons', icon: Tag },
           { id: 'settings', label: 'Settings', icon: Settings },
         ].map((t) => {
           const Icon = t.icon;
@@ -2796,12 +2848,12 @@ export const AdminPage: React.FC = () => {
               key={t.id}
               type="button"
               onClick={() => setActiveTab(t.id as AdminTab)}
-              className={`flex flex-col items-center justify-center min-h-[44px] ${
-                active ? 'text-[#D4AF37] font-semibold' : 'text-[#FFFDFB]/65'
+              className={`flex flex-col items-center justify-center min-w-[60px] min-h-[44px] px-1.5 shrink-0 rounded-lg ${
+                active ? 'text-[#D4AF37] font-semibold bg-[#FFFDFB]/10' : 'text-[#FFFDFB]/65'
               }`}
             >
               <Icon className="w-4 h-4" />
-              <span className="text-[9px] mt-0.5">{t.label}</span>
+              <span className="text-[9px] mt-0.5 whitespace-nowrap">{t.label}</span>
             </button>
           );
         })}
@@ -2944,17 +2996,26 @@ export const AdminPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Cloudinary Direct Image Upload + URL Paste */}
+              {/* Cloudinary Direct Image Upload + URL Paste + 1-Tap Presets */}
               <div className="p-3.5 rounded-xl bg-[#FDF6F6] border border-[#C89D7C]/30 space-y-2.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-xs font-semibold text-[#1E1116]">
-                    Product Photos (Cloudinary Direct Upload or Image URL)
-                  </span>
-                  <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1E1116] text-[#FFFDFB] text-xs font-semibold cursor-pointer">
+                  <div>
+                    <span className="block text-xs font-semibold text-[#1E1116]">
+                      Product Photos (Camera / Gallery Upload, Image URL, or Preset)
+                    </span>
+                    <span className="block text-[10px] text-[#1E1116]/60">
+                      Auto-optimized for fast loading & Vercel deployment (up to 6 photos per product)
+                    </span>
+                  </div>
+                  <label
+                    data-testid="product-photo-upload-label"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#1E1116] hover:bg-[#C89D7C] text-[#FFFDFB] hover:text-[#1E1116] text-xs font-semibold cursor-pointer transition-colors"
+                  >
                     <Upload className="w-3.5 h-3.5 text-[#C89D7C]" />
                     <span>Upload Photos (Camera / Gallery)</span>
                     <input
                       type="file"
+                      data-testid="product-photo-file-input"
                       accept="image/*"
                       multiple
                       onChange={handleCloudinaryProductUpload}
@@ -2972,25 +3033,45 @@ export const AdminPage: React.FC = () => {
                       />
                     </div>
                     <p className="text-[11px] font-mono-num text-[#1E1116]/70">
-                      Uploading to Cloudinary (dxeuzdwkz): {uploadProgress}%
+                      Optimizing & uploading photo: {uploadProgress}%
                     </p>
                   </div>
+                )}
+
+                {prodUploadError && (
+                  <p className="text-xs font-semibold text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-1.5">
+                    {prodUploadError}
+                  </p>
+                )}
+
+                {prodUploadSuccess && (
+                  <p
+                    data-testid="product-photo-upload-success"
+                    className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5 flex items-center gap-1.5"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>{prodUploadSuccess}</span>
+                  </p>
                 )}
 
                 <div className="flex gap-2">
                   <input
                     type="text"
+                    data-testid="product-photo-url-input"
                     value={prodImageUrlInput}
                     onChange={(e) => setProdImageUrlInput(e.target.value)}
-                    placeholder="Or paste an image URL here..."
+                    placeholder="Or paste an image URL / Google Drive link here..."
                     className="flex-1 px-3 py-1.5 text-xs bg-[#FFFDFB] border border-[#1E1116]/15 rounded-lg"
                   />
                   <button
                     type="button"
+                    data-testid="product-photo-add-url-btn"
                     onClick={() => {
                       if (prodImageUrlInput.trim()) {
-                        setProdImages((prev) => [...prev, prodImageUrlInput.trim()]);
+                        const resolved = resolveImageUrl(prodImageUrlInput.trim(), prodCategory);
+                        setProdImages((prev) => [...prev, resolved].slice(0, 6));
                         setProdImageUrlInput('');
+                        setProdUploadSuccess('Image URL added to product gallery!');
                       }
                     }}
                     className="px-3 py-1.5 rounded-lg bg-[#C89D7C] text-[#1E1116] text-xs font-semibold cursor-pointer"
@@ -2999,22 +3080,67 @@ export const AdminPage: React.FC = () => {
                   </button>
                 </div>
 
+                {/* 1-Tap Quick Studio Cover Presets */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                  <span className="text-[10px] font-semibold text-[#1E1116]/60 mr-1">
+                    Quick Studio Presets:
+                  </span>
+                  {CATEGORY_IMAGE_PRESETS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => {
+                        setProdImages((prev) => [preset.url, ...prev.filter((u) => u !== preset.url)].slice(0, 6));
+                        setProdUploadSuccess(`Added "${preset.label}" studio photo!`);
+                      }}
+                      className="px-2 py-1 rounded-md bg-[#FFFDFB] hover:bg-[#1E1116] text-[#1E1116] hover:text-[#FFFDFB] border border-[#1E1116]/15 text-[10px] font-semibold cursor-pointer transition-colors"
+                    >
+                      + {preset.label}
+                    </button>
+                  ))}
+                </div>
+
                 {prodImages.length > 0 && (
-                  <div className="flex items-center gap-2 overflow-x-auto pt-1">
+                  <div className="flex items-center gap-2.5 overflow-x-auto pt-1.5">
                     {prodImages.map((url, idx) => (
-                      <div key={idx} className="relative w-14 h-14 rounded-lg overflow-hidden shrink-0">
+                      <div
+                        key={idx}
+                        data-testid={`uploaded-product-thumb-${idx}`}
+                        className={`relative w-16 h-16 rounded-xl overflow-hidden shrink-0 border-2 ${
+                          idx === 0 ? 'border-[#C89D7C]' : 'border-[#1E1116]/15'
+                        }`}
+                      >
                         <img
                           src={resolveImageUrl(url, prodCategory)}
                           alt={`Upload ${idx + 1}`}
                           onError={(e) => handleImageFallback(e, prodCategory)}
                           className="w-full h-full object-cover"
                         />
+                        {idx === 0 ? (
+                          <span className="absolute bottom-0 inset-x-0 bg-[#1E1116]/85 text-[#D4AF37] text-[8px] font-bold uppercase text-center py-0.5">
+                            Main Cover
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setProdImages((prev) => [
+                                prev[idx],
+                                ...prev.filter((_, i) => i !== idx),
+                              ])
+                            }
+                            className="absolute bottom-0 inset-x-0 bg-[#1E1116]/75 hover:bg-[#C89D7C] text-white hover:text-[#1E1116] text-[8px] font-semibold text-center py-0.5 cursor-pointer"
+                          >
+                            Set Main
+                          </button>
+                        )}
                         <button
                           type="button"
+                          aria-label={`Remove photo ${idx + 1}`}
                           onClick={() =>
                             setProdImages((prev) => prev.filter((_, i) => i !== idx))
                           }
-                          className="absolute top-0.5 right-0.5 bg-red-600 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center"
+                          className="absolute top-0.5 right-0.5 bg-red-600 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center cursor-pointer"
                         >
                           ×
                         </button>
