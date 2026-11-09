@@ -1,0 +1,6 @@
+{
+  "name": "Girlz Zone — Luxury Beauty & Jewellery Store",
+  "description": "Shop authentic cosmetics, skin care, hair care, anti-tarnish jewellery, and perfumes at Girlz Zone, Ambernath with live order tracking.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

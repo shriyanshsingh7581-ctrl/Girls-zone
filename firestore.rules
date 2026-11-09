@@ -1,0 +1,87 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default catch-all deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    match /test/{docId} {
+      allow get: if isValidId(docId);
+    }
+
+    match /categories/{categoryId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(categoryId)
+        && incoming().name is string && incoming().name.size() >= 1 && incoming().name.size() <= 120;
+      allow delete: if isValidId(categoryId);
+    }
+
+    match /products/{productId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(productId)
+        && incoming().name is string && incoming().name.size() >= 1 && incoming().name.size() <= 200
+        && incoming().category is string && incoming().category.size() <= 120
+        && incoming().price is number && incoming().price >= 0
+        && incoming().mrp is number && incoming().mrp >= 0;
+      allow delete: if isValidId(productId);
+    }
+
+    match /orders/{orderId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(orderId)
+        && incoming().orderNumber is string && incoming().orderNumber.size() <= 64
+        && incoming().customerName is string && incoming().customerName.size() <= 150
+        && incoming().customerPhone is string && incoming().customerPhone.size() <= 20
+        && incoming().totalAmount is number && incoming().totalAmount >= 0
+        && incoming().status is string && incoming().status.size() <= 40;
+      allow delete: if isValidId(orderId);
+    }
+
+    match /users/{userId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(userId)
+        && incoming().fullName is string && incoming().fullName.size() <= 150
+        && incoming().phone is string && incoming().phone.size() <= 15
+        && incoming().email is string && incoming().email.size() <= 200;
+      allow delete: if isValidId(userId);
+    }
+
+    match /phoneLookup/{phoneId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(phoneId)
+        && incoming().phone is string && incoming().phone.size() <= 15
+        && incoming().email is string && incoming().email.size() <= 200;
+      allow delete: if isValidId(phoneId);
+    }
+
+    match /banners/{bannerId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(bannerId)
+        && incoming().title is string && incoming().title.size() <= 200;
+      allow delete: if isValidId(bannerId);
+    }
+
+    match /coupons/{couponId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(couponId)
+        && incoming().code is string && incoming().code.size() <= 50;
+      allow delete: if isValidId(couponId);
+    }
+
+    match /storeConfig/{configId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(configId)
+        && incoming().storeName is string && incoming().storeName.size() <= 150;
+      allow delete: if isValidId(configId);
+    }
+  }
+}

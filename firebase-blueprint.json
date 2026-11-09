@@ -1,0 +1,189 @@
+{
+  "entities": {
+    "Category": {
+      "title": "Category",
+      "description": "Store product category in Girlz Zone",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "maxLength": 120 },
+        "slug": { "type": "string", "maxLength": 120 },
+        "image": { "type": "string", "maxLength": 2048 },
+        "order": { "type": "number" },
+        "visible": { "type": "boolean" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "name", "slug", "order", "visible"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Luxury beauty, cosmetic, skincare, haircare, jewellery, or fragrance product",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "maxLength": 200 },
+        "category": { "type": "string", "maxLength": 120 },
+        "price": { "type": "number" },
+        "mrp": { "type": "number" },
+        "discountPercent": { "type": "number" },
+        "inStock": { "type": "boolean" },
+        "stockQuantity": { "type": "number" },
+        "images": { "type": "array" },
+        "badges": { "type": "array" },
+        "variants": { "type": "array" },
+        "bestseller": { "type": "boolean" },
+        "description": { "type": "string", "maxLength": 5000 },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["id", "name", "category", "price", "mrp", "inStock", "stockQuantity"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer order with live Flipkart-style tracking history",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "orderNumber": { "type": "string", "maxLength": 64 },
+        "customerId": { "type": "string", "maxLength": 128 },
+        "customerName": { "type": "string", "maxLength": 150 },
+        "customerPhone": { "type": "string", "maxLength": 20 },
+        "customerEmail": { "type": "string", "maxLength": 200 },
+        "deliveryAddress": { "type": "object" },
+        "deliveryMode": { "type": "string", "enum": ["Home Delivery", "Store Pickup - Girlz Zone Ambernath"] },
+        "paymentMode": { "type": "string", "enum": ["UPI / Online via WhatsApp", "Cash on Delivery"] },
+        "items": { "type": "array" },
+        "subtotal": { "type": "number" },
+        "discountAmount": { "type": "number" },
+        "couponCode": { "type": "string", "maxLength": 64 },
+        "deliveryCharge": { "type": "number" },
+        "totalAmount": { "type": "number" },
+        "status": {
+          "type": "string",
+          "enum": ["Order Placed", "Order Confirmed", "Packed", "Shipped", "Out for Delivery", "Delivered", "Cancelled"]
+        },
+        "courierName": { "type": "string", "maxLength": 120 },
+        "trackingId": { "type": "string", "maxLength": 120 },
+        "expectedDeliveryDate": { "type": "string", "maxLength": 64 },
+        "trackingNote": { "type": "string", "maxLength": 500 },
+        "cancelReason": { "type": "string", "maxLength": 500 },
+        "trackingHistory": { "type": "array" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["id", "orderNumber", "customerName", "customerPhone", "deliveryMode", "paymentMode", "totalAmount", "status", "createdAt"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Registered customer profile with saved delivery address",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "fullName": { "type": "string", "maxLength": 150 },
+        "phone": { "type": "string", "maxLength": 15 },
+        "email": { "type": "string", "maxLength": 200 },
+        "passwordHash": { "type": "string", "maxLength": 256 },
+        "address": { "type": "object" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["uid", "fullName", "phone", "email", "address"]
+    },
+    "PhoneLookup": {
+      "title": "PhoneLookup",
+      "description": "Maps 10-digit customer phone number to email and user ID for dual login",
+      "type": "object",
+      "properties": {
+        "phone": { "type": "string", "maxLength": 15 },
+        "email": { "type": "string", "maxLength": 200 },
+        "uid": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["phone", "email", "uid"]
+    },
+    "Banner": {
+      "title": "Banner",
+      "description": "Homepage hero slider banner",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 200 },
+        "subtitle": { "type": "string", "maxLength": 300 },
+        "offerBadge": { "type": "string", "maxLength": 100 },
+        "ctaText": { "type": "string", "maxLength": 80 },
+        "ctaCategory": { "type": "string", "maxLength": 120 },
+        "image": { "type": "string", "maxLength": 2048 },
+        "order": { "type": "number" },
+        "active": { "type": "boolean" }
+      },
+      "required": ["id", "title", "image", "active"]
+    },
+    "Coupon": {
+      "title": "Coupon",
+      "description": "Promotional discount code",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "code": { "type": "string", "maxLength": 50 },
+        "type": { "type": "string", "enum": ["PERCENT", "FLAT"] },
+        "value": { "type": "number" },
+        "minOrderAmount": { "type": "number" },
+        "active": { "type": "boolean" },
+        "description": { "type": "string", "maxLength": 200 }
+      },
+      "required": ["id", "code", "type", "value", "minOrderAmount", "active"]
+    },
+    "StoreConfig": {
+      "title": "StoreConfig",
+      "description": "Global store settings, announcement bar, flash sale toggle, and admin credentials",
+      "type": "object",
+      "properties": {
+        "storeName": { "type": "string", "maxLength": 150 },
+        "storeAddress": { "type": "string", "maxLength": 500 },
+        "whatsappNumber": { "type": "string", "maxLength": 25 },
+        "announcementText": { "type": "string", "maxLength": 400 },
+        "flashSaleActive": { "type": "boolean" },
+        "flashSaleTitle": { "type": "string", "maxLength": 200 },
+        "deliveryCharge": { "type": "number" },
+        "freeDeliveryThreshold": { "type": "number" },
+        "adminId": { "type": "string", "maxLength": 150 },
+        "adminEmail": { "type": "string", "maxLength": 150 },
+        "adminPassword": { "type": "string", "maxLength": 150 }
+      },
+      "required": ["storeName", "storeAddress", "whatsappNumber"]
+    }
+  },
+  "firestore": {
+    "/categories/{categoryId}": {
+      "schema": { "$ref": "#/entities/Category" },
+      "description": "Store categories"
+    },
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Store products catalog"
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Customer orders and tracking timeline"
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Registered customer profiles and saved addresses"
+    },
+    "/phoneLookup/{phoneId}": {
+      "schema": { "$ref": "#/entities/PhoneLookup" },
+      "description": "Phone number to email lookup for dual login"
+    },
+    "/banners/{bannerId}": {
+      "schema": { "$ref": "#/entities/Banner" },
+      "description": "Hero slider banners"
+    },
+    "/coupons/{couponId}": {
+      "schema": { "$ref": "#/entities/Coupon" },
+      "description": "Promo and discount coupons"
+    },
+    "/storeConfig/{configId}": {
+      "schema": { "$ref": "#/entities/StoreConfig" },
+      "description": "Store configuration and admin credentials"
+    }
+  }
+}
