@@ -1,5 +1,6 @@
 import React from 'react';
-import { MapPin, Phone, MessageCircle, ExternalLink, ShieldCheck, Sparkles, Truck } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { MapPin, Phone, MessageCircle, ExternalLink, ShieldCheck, Sparkles, Truck, FileText } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 
 interface FooterProps {
@@ -14,6 +15,10 @@ export const Footer: React.FC<FooterProps> = ({ onSelectCategory, onTrackOrderCl
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
     `${storeConfig.storeName} ${storeConfig.storeAddress}`
   )}`;
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   return (
     <footer className="bg-[#1E1116] text-[#FFFDFB] mt-16 pb-20 md:pb-0">
@@ -59,7 +64,7 @@ export const Footer: React.FC<FooterProps> = ({ onSelectCategory, onTrackOrderCl
       </div>
 
       {/* Main Multi-Column Footer (Strictly NO Admin Links) */}
-      <div className="max-w-7xl mx-auto px-6 py-12 grid grid-cols-1 md:grid-cols-4 gap-10">
+      <div className="max-w-7xl mx-auto px-6 py-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-10">
         {/* Column 1: Brand & Story */}
         <div className="space-y-3">
           <h2 className="text-2xl font-serif-luxury font-semibold text-[#FFFDFB]">
@@ -71,7 +76,7 @@ export const Footer: React.FC<FooterProps> = ({ onSelectCategory, onTrackOrderCl
           </p>
         </div>
 
-        {/* Column 2: Official 7 Store Categories */}
+        {/* Column 2: Official Store Categories */}
         <div className="space-y-3">
           <h3 className="text-xs font-semibold uppercase tracking-widest text-[#D4AF37]">
             Collections
@@ -123,12 +128,67 @@ export const Footer: React.FC<FooterProps> = ({ onSelectCategory, onTrackOrderCl
               Free Delivery on Orders Above ₹{storeConfig.freeDeliveryThreshold}
             </li>
             <li className="text-[#FFFDFB]/60">
-              Cash on Delivery & Store Pickup Available
+              Razorpay UPI, Cards, COD & Store Pickup
             </li>
           </ul>
         </div>
 
-        {/* Column 4: Store Address & WhatsApp */}
+        {/* Column 4: Legal & Policies (Razorpay Compliance) */}
+        <div className="space-y-3">
+          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#D4AF37] flex items-center gap-1.5">
+            <FileText className="w-3.5 h-3.5 text-[#D4AF37]" />
+            <span>Legal & Policies</span>
+          </h3>
+          <ul className="space-y-2 text-xs text-[#FFFDFB]/80">
+            <li>
+              <Link
+                to="/contact-us"
+                onClick={scrollToTop}
+                className="hover:text-[#D4AF37] transition-colors inline-block"
+              >
+                Contact Us
+              </Link>
+            </li>
+            <li>
+              <Link
+                to="/terms-and-conditions"
+                onClick={scrollToTop}
+                className="hover:text-[#D4AF37] transition-colors inline-block"
+              >
+                Terms & Conditions
+              </Link>
+            </li>
+            <li>
+              <Link
+                to="/privacy-policy"
+                onClick={scrollToTop}
+                className="hover:text-[#D4AF37] transition-colors inline-block"
+              >
+                Privacy Policy
+              </Link>
+            </li>
+            <li>
+              <Link
+                to="/refund-policy"
+                onClick={scrollToTop}
+                className="hover:text-[#D4AF37] transition-colors inline-block"
+              >
+                Refund & Cancellation Policy
+              </Link>
+            </li>
+            <li>
+              <Link
+                to="/shipping-policy"
+                onClick={scrollToTop}
+                className="hover:text-[#D4AF37] transition-colors inline-block"
+              >
+                Shipping & Delivery Policy
+              </Link>
+            </li>
+          </ul>
+        </div>
+
+        {/* Column 5: Store Address & WhatsApp */}
         <div className="space-y-3">
           <h3 className="text-xs font-semibold uppercase tracking-widest text-[#D4AF37]">
             Visit Our Store
@@ -168,10 +228,31 @@ export const Footer: React.FC<FooterProps> = ({ onSelectCategory, onTrackOrderCl
         </div>
       </div>
 
-      {/* Bottom Copyright */}
+      {/* Bottom Copyright & Policy Bar */}
       <div className="border-t border-[#FFFDFB]/10">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-[#FFFDFB]/55">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col lg:flex-row items-center justify-between gap-3 text-[11px] text-[#FFFDFB]/55">
           <p>© {new Date().getFullYear()} Girlz Zone, Ambernath. All rights reserved.</p>
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[#FFFDFB]/70">
+            <Link to="/contact-us" onClick={scrollToTop} className="hover:text-[#D4AF37] transition-colors">
+              Contact Us
+            </Link>
+            <span>•</span>
+            <Link to="/terms-and-conditions" onClick={scrollToTop} className="hover:text-[#D4AF37] transition-colors">
+              Terms & Conditions
+            </Link>
+            <span>•</span>
+            <Link to="/privacy-policy" onClick={scrollToTop} className="hover:text-[#D4AF37] transition-colors">
+              Privacy Policy
+            </Link>
+            <span>•</span>
+            <Link to="/refund-policy" onClick={scrollToTop} className="hover:text-[#D4AF37] transition-colors">
+              Refund Policy
+            </Link>
+            <span>•</span>
+            <Link to="/shipping-policy" onClick={scrollToTop} className="hover:text-[#D4AF37] transition-colors">
+              Shipping Policy
+            </Link>
+          </div>
           <p>Shop no.3, Opp. Concept Arena, Near Smart Bazaar, Palegaon, Ambernath - 421501</p>
         </div>
       </div>
