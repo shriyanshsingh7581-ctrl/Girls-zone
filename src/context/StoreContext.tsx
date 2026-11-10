@@ -10,6 +10,7 @@ import {
   Order,
   OrderStatus,
   PaymentMode,
+  PaymentStatus,
   Product,
   StoreConfig,
 } from '../types';
@@ -95,6 +96,10 @@ const DEFAULT_STORE_CONFIG: StoreConfig = {
   adminId: 'admin@girlzzone.com',
   adminEmail: 'admin@girlzzone.com',
   adminPassword: 'GirlzZone@123',
+
+  // Payment Methods Toggle
+  razorpayEnabled: true,
+  codEnabled: true,
 
   // Active Storefront Template & Theme Customization
   activeTemplate: 'prestige',
@@ -211,6 +216,10 @@ interface StoreContextType {
     deliveryAddress: DeliveryAddress;
     deliveryMode: DeliveryMode;
     paymentMode: PaymentMode;
+    paymentStatus?: PaymentStatus;
+    razorpayPaymentId?: string;
+    razorpayOrderId?: string;
+    razorpaySignature?: string;
     couponCode?: string;
     subtotal: number;
     discountAmount: number;
@@ -236,6 +245,7 @@ interface StoreContextType {
     trackingNote?: string;
     cancelReason?: string;
   }) => Promise<void>;
+  updateOrderPaymentStatus: (order: Order, paymentStatus: PaymentStatus, razorpayPaymentId?: string) => Promise<void>;
   saveCategory: (catData: { name: string; image: string; visible: boolean; order: number }, existingId?: string) => Promise<Category>;
   deleteCategory: (categoryId: string) => Promise<void>;
   reorderCategory: (categoryId: string, direction: 'UP' | 'DOWN') => Promise<void>;
@@ -859,6 +869,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     deliveryAddress: DeliveryAddress;
     deliveryMode: DeliveryMode;
     paymentMode: PaymentMode;
+    paymentStatus?: PaymentStatus;
+    razorpayPaymentId?: string;
+    razorpayOrderId?: string;
+    razorpaySignature?: string;
     couponCode?: string;
     subtotal: number;
     discountAmount: number;
@@ -875,6 +889,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const orderId = `ord_${now}_${orderNumber.replace(/[^a-zA-Z0-9]/g, '')}`;
     const cleanPhone = normalizePhone(params.customerPhone);
 
+    const resolvedPaymentStatus: PaymentStatus =
+      params.paymentStatus ||
+      (params.razorpayPaymentId ? 'PAID' : 'PENDING');
+
+    const initialNote =
+      resolvedPaymentStatus === 'PAID' && params.razorpayPaymentId
+        ? `Paid Online via Razorpay (Payment ID: ${params.razorpayPaymentId}) · Order received by Girlz Zone`
+        : 'Order received by Girlz Zone';
+
     const newOrder: Order = {
       id: orderId,
       orderNumber,
@@ -885,6 +908,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       deliveryAddress: params.deliveryAddress,
       deliveryMode: params.deliveryMode,
       paymentMode: params.paymentMode,
+      paymentStatus: resolvedPaymentStatus,
+      razorpayPaymentId: (params.razorpayPaymentId || '').slice(0, 100),
+      razorpayOrderId: (params.razorpayOrderId || '').slice(0, 100),
+      razorpaySignature: (params.razorpaySignature || '').slice(0, 200),
       items: [...cart],
       subtotal: Math.max(0, Number(params.subtotal) || 0),
       discountAmount: Math.max(0, Number(params.discountAmount) || 0),
@@ -895,13 +922,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       courierName: '',
       trackingId: '',
       expectedDeliveryDate: '',
-      trackingNote: 'Order received by Girlz Zone',
+      trackingNote: initialNote,
       cancelReason: '',
       trackingHistory: [
         {
           status: 'Order Placed',
           timestamp: now,
-          note: 'Order received by Girlz Zone',
+          note: initialNote,
         },
       ],
       createdAt: now,
@@ -1074,6 +1101,24 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     await set(ref(db, `orders/${order.id}`), updatedOrder);
   };
 
+  const updateOrderPaymentStatus = async (
+    order: Order,
+    paymentStatus: PaymentStatus,
+    razorpayPaymentId?: string
+  ) => {
+    const now = Date.now();
+    const updatedOrder: Order = {
+      ...order,
+      paymentStatus,
+      ...(razorpayPaymentId !== undefined
+        ? { razorpayPaymentId: razorpayPaymentId.trim().slice(0, 100) }
+        : {}),
+      updatedAt: now,
+    };
+    setOrders((prev) => prev.map((o) => (o.id === order.id ? updatedOrder : o)));
+    await set(ref(db, `orders/${order.id}`), updatedOrder);
+  };
+
   const saveCategory = async (
     catData: { name: string; image: string; visible: boolean; order: number },
     existingId?: string
@@ -1243,6 +1288,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         toggleProductStock,
         toggleProductBestseller,
         updateOrderStatus,
+        updateOrderPaymentStatus,
         saveCategory,
         deleteCategory,
         reorderCategory,

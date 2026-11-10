@@ -201,7 +201,7 @@ export const OrderTrackerView: React.FC<OrderTrackerViewProps> = ({ initialSearc
                     )}
                   </div>
 
-                  <div className="text-right font-mono-num">
+                  <div className="text-right font-mono-num space-y-0.5">
                     <p className="text-xs text-[#1E1116]/60">Total Bill</p>
                     <p className="text-lg font-bold text-[#1E1116]">₹{activeOrder.totalAmount}</p>
                     {activeOrder.discountAmount > 0 && (
@@ -211,6 +211,24 @@ export const OrderTrackerView: React.FC<OrderTrackerViewProps> = ({ initialSearc
                       </p>
                     )}
                     <p className="text-[11px] text-[#1E1116]/60">{activeOrder.paymentMode}</p>
+                    <div className="pt-0.5">
+                      <span
+                        className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                          activeOrder.paymentStatus === 'PAID'
+                            ? 'bg-emerald-700 text-white'
+                            : 'bg-amber-100 text-amber-800'
+                        }`}
+                      >
+                        {activeOrder.paymentStatus === 'PAID'
+                          ? 'PAID ONLINE ✓'
+                          : 'PAY ON DELIVERY'}
+                      </span>
+                    </div>
+                    {activeOrder.razorpayPaymentId && (
+                      <p className="text-[10px] font-bold text-emerald-700">
+                        Razorpay ID: {activeOrder.razorpayPaymentId}
+                      </p>
+                    )}
                   </div>
                 </div>
 

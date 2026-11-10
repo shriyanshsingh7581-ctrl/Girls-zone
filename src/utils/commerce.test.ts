@@ -16,6 +16,7 @@ import {
   normalizePhone,
 } from './commerce';
 import { Coupon, Order } from '../types';
+import { convertRupeesToPaise, RAZORPAY_LIVE_KEY_ID } from '../lib/razorpay';
 
 test('DEFAULT_CATEGORY_NAMES contains strictly the 7 official categories', () => {
   assert.equal(DEFAULT_CATEGORY_NAMES.length, 7);
@@ -132,7 +133,11 @@ test('appendTrackingStage maintains chronological Flipkart tracking steps withou
   assert.equal(afterShipped[2].trackingId, 'DLV998877');
 });
 
-test('formatDeliveryAddress and WhatsApp invoice/tracking links format accurately', () => {
+test('formatDeliveryAddress and WhatsApp invoice/tracking links format accurately including Razorpay payment ID', () => {
+  assert.equal(RAZORPAY_LIVE_KEY_ID, 'rzp_live_ThTjqAzOXvwuwl');
+  assert.equal(convertRupeesToPaise(499), 49900);
+  assert.equal(convertRupeesToPaise(0), 100);
+
   const addr = {
     houseFlatNo: 'Flat 402',
     buildingStreet: 'Pearl Residency',
@@ -155,7 +160,9 @@ test('formatDeliveryAddress and WhatsApp invoice/tracking links format accuratel
     customerEmail: 'aarohi@example.com',
     deliveryAddress: addr,
     deliveryMode: 'Home Delivery',
-    paymentMode: 'UPI / Online via WhatsApp',
+    paymentMode: 'Razorpay Online (UPI / Cards / NetBanking)',
+    paymentStatus: 'PAID',
+    razorpayPaymentId: 'pay_RzpLiveTest99',
     items: [
       {
         productId: 'p1',
@@ -191,6 +198,8 @@ test('formatDeliveryAddress and WhatsApp invoice/tracking links format accuratel
   );
   assert.ok(invoiceUrl.startsWith('https://wa.me/918329783642?text='));
   assert.ok(decodeURIComponent(invoiceUrl).includes('VIP ORDER GZ-10001'));
+  assert.ok(decodeURIComponent(invoiceUrl).includes('PAID ONLINE'));
+  assert.ok(decodeURIComponent(invoiceUrl).includes('pay_RzpLiveTest99'));
   assert.ok(decodeURIComponent(invoiceUrl).includes('Thank you Aarohi Sharma!'));
 
   const trackingUrl = buildAdminTrackingWhatsAppUrl(
@@ -200,5 +209,6 @@ test('formatDeliveryAddress and WhatsApp invoice/tracking links format accuratel
   );
   assert.ok(trackingUrl.startsWith('https://wa.me/919876543210?text='));
   assert.ok(decodeURIComponent(trackingUrl).includes('BD12345'));
+  assert.ok(decodeURIComponent(trackingUrl).includes('pay_RzpLiveTest99'));
   assert.ok(decodeURIComponent(trackingUrl).includes('Warm regards, Girlz Zone'));
 });

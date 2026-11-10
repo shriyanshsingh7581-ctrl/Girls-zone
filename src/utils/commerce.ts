@@ -379,6 +379,13 @@ export function buildOrderInvoiceWhatsAppUrl(
       })
     : '';
 
+  const paymentStatusLine =
+    order.paymentStatus === 'PAID'
+      ? `Payment Status: *PAID ONLINE ✅*${
+          order.razorpayPaymentId ? ` (Razorpay ID: ${order.razorpayPaymentId})` : ''
+        }`
+      : `Payment Status: *${order.paymentStatus || 'Pay on Delivery / Pending'}*`;
+
   const message = [
     headerLine,
     `Order ID: *${order.orderNumber}*`,
@@ -386,6 +393,7 @@ export function buildOrderInvoiceWhatsAppUrl(
     `Phone: ${order.customerPhone}`,
     `Delivery Mode: ${order.deliveryMode}`,
     `Payment Mode: ${order.paymentMode}`,
+    paymentStatusLine,
     ``,
     `*Ordered Items:*`,
     itemLines,
@@ -393,7 +401,7 @@ export function buildOrderInvoiceWhatsAppUrl(
     `Subtotal: ₹${order.subtotal}`,
     order.discountAmount > 0 ? `Discount (${order.couponCode}): -₹${order.discountAmount}` : '',
     `Delivery: ${order.deliveryCharge === 0 ? 'FREE' : `₹${order.deliveryCharge}`}`,
-    `*Total Payable: ₹${order.totalAmount}*`,
+    `*Total Amount: ₹${order.totalAmount}*`,
     ``,
     `*Delivery Address:*`,
     addressText,
@@ -436,6 +444,11 @@ export function buildAdminTrackingWhatsAppUrl(
     }
   );
 
+  const paymentSummary =
+    order.paymentStatus === 'PAID'
+      ? `PAID ONLINE${order.razorpayPaymentId ? ` · ${order.razorpayPaymentId}` : ''}`
+      : order.paymentMode;
+
   const lines = [
     introLine,
     ``,
@@ -444,7 +457,7 @@ export function buildAdminTrackingWhatsAppUrl(
     order.courierName ? `Courier Partner: ${order.courierName}` : '',
     order.trackingId ? `Tracking ID / AWB: *${order.trackingId}*` : '',
     order.expectedDeliveryDate ? `Expected Delivery: ${order.expectedDeliveryDate}` : '',
-    `Order Total: ₹${order.totalAmount} (${order.paymentMode})`,
+    `Order Total: ₹${order.totalAmount} (${paymentSummary})`,
     ``,
     outroLine,
   ]

@@ -51,7 +51,21 @@
         "customerEmail": { "type": "string", "maxLength": 200 },
         "deliveryAddress": { "type": "object" },
         "deliveryMode": { "type": "string", "enum": ["Home Delivery", "Store Pickup - Girlz Zone Ambernath"] },
-        "paymentMode": { "type": "string", "enum": ["UPI / Online via WhatsApp", "Cash on Delivery"] },
+        "paymentMode": {
+          "type": "string",
+          "enum": [
+            "Razorpay Online (UPI / Cards / NetBanking)",
+            "UPI / Online via WhatsApp",
+            "Cash on Delivery"
+          ]
+        },
+        "paymentStatus": {
+          "type": "string",
+          "enum": ["PAID", "PENDING", "FAILED", "REFUNDED"]
+        },
+        "razorpayPaymentId": { "type": "string", "maxLength": 100 },
+        "razorpayOrderId": { "type": "string", "maxLength": 100 },
+        "razorpaySignature": { "type": "string", "maxLength": 200 },
         "items": { "type": "array" },
         "subtotal": { "type": "number" },
         "discountAmount": { "type": "number" },

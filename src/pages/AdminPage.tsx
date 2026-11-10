@@ -26,6 +26,7 @@ import {
   ArrowUp,
   ArrowDown,
   RotateCcw,
+  ShieldCheck,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
@@ -36,6 +37,7 @@ import {
   HeroBanner,
   Order,
   OrderStatus,
+  PaymentStatus,
   Product,
   ProductBadge,
   StoreTemplateId,
@@ -100,6 +102,7 @@ export const AdminPage: React.FC = () => {
     toggleProductStock,
     toggleProductBestseller,
     updateOrderStatus,
+    updateOrderPaymentStatus,
     saveCategory,
     deleteCategory,
     reorderCategory,
@@ -1292,11 +1295,25 @@ export const AdminPage: React.FC = () => {
                       >
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div>
-                            <p className="font-mono-num font-bold text-[#1E1116]">
-                              {ord.orderNumber} · {ord.customerName} (+91 {ord.customerPhone})
-                            </p>
-                            <p className="text-[11px] text-[#1E1116]/60">
-                              {ord.items.length} items · ₹{ord.totalAmount} · {ord.deliveryMode}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="font-mono-num font-bold text-[#1E1116]">
+                                {ord.orderNumber} · {ord.customerName} (+91 {ord.customerPhone})
+                              </p>
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
+                                  ord.paymentStatus === 'PAID'
+                                    ? 'bg-emerald-700 text-white'
+                                    : 'bg-amber-100 text-amber-800'
+                                }`}
+                              >
+                                {ord.paymentStatus === 'PAID'
+                                  ? `PAID ONLINE${ord.razorpayPaymentId ? ` · ${ord.razorpayPaymentId}` : ''}`
+                                  : 'COD / PENDING'}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-[#1E1116]/60 mt-0.5">
+                              {ord.items.length} items · ₹{ord.totalAmount} · {ord.deliveryMode} ·{' '}
+                              {ord.paymentMode}
                             </p>
                           </div>
 
@@ -1666,8 +1683,45 @@ export const AdminPage: React.FC = () => {
                           ))}
                         </div>
 
-                        <div className="text-right font-mono-num">
+                        <div className="text-right font-mono-num space-y-1">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                                ord.paymentStatus === 'PAID'
+                                  ? 'bg-emerald-700 text-white'
+                                  : ord.paymentStatus === 'REFUNDED'
+                                  ? 'bg-red-100 text-red-700'
+                                  : 'bg-amber-100 text-amber-800'
+                              }`}
+                            >
+                              {ord.paymentStatus === 'PAID'
+                                ? 'PAID ONLINE ✓'
+                                : ord.paymentStatus === 'REFUNDED'
+                                ? 'REFUNDED'
+                                : 'PAYMENT PENDING / COD'}
+                            </span>
+                            <select
+                              aria-label={`Payment status for ${ord.orderNumber}`}
+                              value={ord.paymentStatus || 'PENDING'}
+                              onChange={(e) =>
+                                updateOrderPaymentStatus(
+                                  ord,
+                                  e.target.value as PaymentStatus
+                                )
+                              }
+                              className="px-2 py-0.5 rounded border border-[#1E1116]/20 bg-[#FDF6F6] text-[10px] font-semibold cursor-pointer"
+                            >
+                              <option value="PAID">Mark Paid</option>
+                              <option value="PENDING">Mark Pending</option>
+                              <option value="REFUNDED">Mark Refunded</option>
+                            </select>
+                          </div>
                           <p className="text-xs text-[#1E1116]/60">{ord.paymentMode}</p>
+                          {ord.razorpayPaymentId && (
+                            <p className="text-[11px] font-bold text-emerald-700">
+                              Razorpay ID: {ord.razorpayPaymentId}
+                            </p>
+                          )}
                           <p className="text-lg font-bold text-[#1E1116]">Total: ₹{ord.totalAmount}</p>
                         </div>
                       </div>
@@ -2780,6 +2834,49 @@ export const AdminPage: React.FC = () => {
                     onChange={(e) => updateStoreConfig({ adminPassword: e.target.value })}
                     className="w-full px-3 py-2 text-xs font-mono-num bg-[#FFFDFB] border border-[#1E1116]/15 rounded-lg"
                   />
+                </div>
+              </div>
+
+              {/* Razorpay Live Payment Gateway & Checkout Options */}
+              <div className="pt-3 border-t border-[#1E1116]/10 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-700" />
+                    <span className="text-xs font-bold text-[#1E1116]">
+                      Razorpay Payment Gateway (Live Mode)
+                    </span>
+                  </div>
+                  <span
+                    data-testid="admin-razorpay-live-badge"
+                    className="px-2.5 py-0.5 rounded-full bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-wider"
+                  >
+                    Live Gateway Active ✓
+                  </span>
+                </div>
+                <p className="text-[11px] text-[#1E1116]/65">
+                  Accepts instant online payments via UPI (GPay, PhonePe, Paytm, BHIM), Credit/Debit Cards, NetBanking & Wallets with automatic signature verification.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                  <label className="flex items-center gap-2 p-2.5 rounded-xl bg-[#FFFDFB] border border-[#1E1116]/15 text-xs font-semibold cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={storeConfig.razorpayEnabled !== false}
+                      onChange={(e) =>
+                        updateStoreConfig({ razorpayEnabled: e.target.checked })
+                      }
+                    />
+                    <span>Enable Razorpay Online Payment</span>
+                  </label>
+                  <label className="flex items-center gap-2 p-2.5 rounded-xl bg-[#FFFDFB] border border-[#1E1116]/15 text-xs font-semibold cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={storeConfig.codEnabled !== false}
+                      onChange={(e) =>
+                        updateStoreConfig({ codEnabled: e.target.checked })
+                      }
+                    />
+                    <span>Enable Cash on Delivery (COD)</span>
+                  </label>
                 </div>
               </div>
 

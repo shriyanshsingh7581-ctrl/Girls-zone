@@ -136,7 +136,12 @@ export interface TrackingStep {
 }
 
 export type DeliveryMode = 'Home Delivery' | 'Store Pickup - Girlz Zone Ambernath';
-export type PaymentMode = 'UPI / Online via WhatsApp' | 'Cash on Delivery';
+export type PaymentMode =
+  | 'Razorpay Online (UPI / Cards / NetBanking)'
+  | 'UPI / Online via WhatsApp'
+  | 'Cash on Delivery';
+
+export type PaymentStatus = 'PAID' | 'PENDING' | 'FAILED' | 'REFUNDED';
 
 export interface Order {
   id: string;
@@ -148,6 +153,10 @@ export interface Order {
   deliveryAddress: DeliveryAddress;
   deliveryMode: DeliveryMode;
   paymentMode: PaymentMode;
+  paymentStatus?: PaymentStatus;
+  razorpayPaymentId?: string;
+  razorpayOrderId?: string;
+  razorpaySignature?: string;
   items: CartItem[];
   subtotal: number;
   discountAmount: number;
@@ -199,6 +208,10 @@ export interface StoreConfig {
   adminId: string;
   adminEmail: string;
   adminPassword: string;
+
+  // Payment Methods Toggle
+  razorpayEnabled?: boolean;
+  codEnabled?: boolean;
 
   // 4 Storefront Templates & Global Color Theme Control
   activeTemplate: StoreTemplateId;

@@ -11,15 +11,19 @@ import {
   CreditCard,
   ArrowRight,
   PackageCheck,
+  ShieldCheck,
 } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import { DeliveryAddress, DeliveryMode, Order, PaymentMode } from '../types';
 import {
   buildOrderInvoiceWhatsAppUrl,
   calculateOrderTotals,
+  formatDeliveryAddress,
   isValidTenDigitPhone,
   normalizePhone,
 } from '../utils/commerce';
+import { initiateRazorpayPayment } from '../lib/razorpay';
+import { handleImageFallback, resolveImageUrl } from '../utils/images';
 
 interface CartDrawerProps {
   onViewOrderTracking: (orderNumber: string) => void;
@@ -64,7 +68,11 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onViewOrderTracking }) =
   const [customerEmail, setCustomerEmail] = useState('');
   const [address, setAddress] = useState<DeliveryAddress>(EMPTY_ADDRESS);
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('Home Delivery');
-  const [paymentMode, setPaymentMode] = useState<PaymentMode>('UPI / Online via WhatsApp');
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>(
+    storeConfig.razorpayEnabled === false
+      ? 'Cash on Delivery'
+      : 'Razorpay Online (UPI / Cards / NetBanking)'
+  );
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [placedOrder, setPlacedOrder] = useState<Order | null>(null);
@@ -177,13 +185,44 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onViewOrderTracking }) =
 
     try {
       setSubmitting(true);
+      const cleanPhone = normalizePhone(customerPhone);
+
+      let paymentStatus: 'PAID' | 'PENDING' = 'PENDING';
+      let razorpayPaymentId = '';
+      let razorpayOrderId = '';
+      let razorpaySignature = '';
+
+      if (paymentMode === 'Razorpay Online (UPI / Cards / NetBanking)') {
+        const paymentResult = await initiateRazorpayPayment({
+          amountInRupees: totals.totalAmount,
+          storeName: storeConfig.storeName || 'Girlz Zone',
+          customerName: customerName.trim(),
+          customerPhone: cleanPhone,
+          customerEmail: customerEmail.trim(),
+          addressSummary:
+            deliveryMode === 'Store Pickup - Girlz Zone Ambernath'
+              ? 'Store Pickup at Girlz Zone Ambernath'
+              : formatDeliveryAddress(address),
+          themeColor: storeConfig.themeAccentPrimary || '#C89D7C',
+        });
+
+        paymentStatus = 'PAID';
+        razorpayPaymentId = paymentResult.paymentId;
+        razorpayOrderId = paymentResult.orderId;
+        razorpaySignature = paymentResult.signature;
+      }
+
       const createdOrder = await placeOrder({
         customerName: customerName.trim(),
-        customerPhone: normalizePhone(customerPhone),
+        customerPhone: cleanPhone,
         customerEmail: customerEmail.trim(),
         deliveryAddress: address,
         deliveryMode,
         paymentMode,
+        paymentStatus,
+        razorpayPaymentId,
+        razorpayOrderId,
+        razorpaySignature,
         couponCode: totals.couponApplied ? appliedCouponCode : '',
         subtotal: totals.subtotal,
         discountAmount: totals.discountAmount,
@@ -280,6 +319,28 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onViewOrderTracking }) =
                   <span className="text-[#1E1116]/60">Payment Mode</span>
                   <span className="font-semibold text-[#1E1116]">{placedOrder.paymentMode}</span>
                 </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-[#1E1116]/60">Payment Status</span>
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                      placedOrder.paymentStatus === 'PAID'
+                        ? 'bg-emerald-700 text-white'
+                        : 'bg-amber-100 text-amber-800'
+                    }`}
+                  >
+                    {placedOrder.paymentStatus === 'PAID'
+                      ? 'PAID ONLINE ✓'
+                      : 'PAY ON DELIVERY'}
+                  </span>
+                </div>
+                {placedOrder.razorpayPaymentId && (
+                  <div className="flex justify-between">
+                    <span className="text-[#1E1116]/60">Razorpay Payment ID</span>
+                    <span className="font-mono-num font-bold text-emerald-700">
+                      {placedOrder.razorpayPaymentId}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between pt-2 border-t border-[#1E1116]/10">
                   <span className="font-semibold text-[#1E1116]">Total Amount</span>
                   <span className="font-mono-num font-bold text-sm text-[#1E1116]">
@@ -340,8 +401,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onViewOrderTracking }) =
                     className="flex gap-3 p-3 rounded-xl bg-[#FDF6F6]/70 border border-[#1E1116]/8"
                   >
                     <img
-                      src={item.image}
+                      src={resolveImageUrl(item.image, item.category)}
                       alt={item.name}
+                      onError={(e) => handleImageFallback(e, item.category)}
                       referrerPolicy="no-referrer"
                       className="w-16 h-20 rounded-lg object-cover bg-[#FFFDFB] shrink-0"
                     />
@@ -799,8 +861,60 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onViewOrderTracking }) =
                   4. Payment Method
                 </h4>
                 <div className="grid grid-cols-1 gap-2">
+                  {storeConfig.razorpayEnabled !== false && (
+                    <button
+                      type="button"
+                      data-testid="payment-option-razorpay"
+                      onClick={() =>
+                        setPaymentMode('Razorpay Online (UPI / Cards / NetBanking)')
+                      }
+                      className={`p-3 rounded-xl border text-left flex items-center gap-3 transition-colors cursor-pointer ${
+                        paymentMode === 'Razorpay Online (UPI / Cards / NetBanking)'
+                          ? 'border-[#C89D7C] bg-[#FDF6F6] ring-1 ring-[#C89D7C]/50'
+                          : 'border-[#1E1116]/15 bg-[#FFFDFB]'
+                      }`}
+                    >
+                      <ShieldCheck className="w-5 h-5 text-emerald-700 shrink-0" />
+                      <div className="flex-1 text-xs">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="font-bold text-[#1E1116]">
+                            Pay Online via Razorpay
+                          </p>
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-700 text-white text-[9px] font-bold uppercase tracking-wider">
+                            Instant & Verified
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-[#1E1116]/65 mt-0.5">
+                          UPI (GPay, PhonePe, Paytm), Credit/Debit Cards, NetBanking & Wallets
+                        </p>
+                      </div>
+                    </button>
+                  )}
+
+                  {storeConfig.codEnabled !== false && (
+                    <button
+                      type="button"
+                      data-testid="payment-option-cod"
+                      onClick={() => setPaymentMode('Cash on Delivery')}
+                      className={`p-3 rounded-xl border text-left flex items-center gap-3 transition-colors cursor-pointer ${
+                        paymentMode === 'Cash on Delivery'
+                          ? 'border-[#C89D7C] bg-[#FDF6F6]'
+                          : 'border-[#1E1116]/15 bg-[#FFFDFB]'
+                      }`}
+                    >
+                      <ShoppingBag className="w-4 h-4 text-[#C89D7C] shrink-0" />
+                      <div className="text-xs">
+                        <p className="font-semibold text-[#1E1116]">Cash on Delivery (COD)</p>
+                        <p className="text-[11px] text-[#1E1116]/60">
+                          Pay by cash or UPI when your order arrives
+                        </p>
+                      </div>
+                    </button>
+                  )}
+
                   <button
                     type="button"
+                    data-testid="payment-option-whatsapp"
                     onClick={() => setPaymentMode('UPI / Online via WhatsApp')}
                     className={`p-3 rounded-xl border text-left flex items-center gap-3 transition-colors cursor-pointer ${
                       paymentMode === 'UPI / Online via WhatsApp'
@@ -813,24 +927,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onViewOrderTracking }) =
                       <p className="font-semibold text-[#1E1116]">UPI / Online via WhatsApp</p>
                       <p className="text-[11px] text-[#1E1116]/60">
                         Instant UPI QR or GPay/PhonePe link via official Girlz Zone WhatsApp
-                      </p>
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMode('Cash on Delivery')}
-                    className={`p-3 rounded-xl border text-left flex items-center gap-3 transition-colors cursor-pointer ${
-                      paymentMode === 'Cash on Delivery'
-                        ? 'border-[#C89D7C] bg-[#FDF6F6]'
-                        : 'border-[#1E1116]/15 bg-[#FFFDFB]'
-                    }`}
-                  >
-                    <ShoppingBag className="w-4 h-4 text-[#C89D7C] shrink-0" />
-                    <div className="text-xs">
-                      <p className="font-semibold text-[#1E1116]">Cash on Delivery (COD)</p>
-                      <p className="text-[11px] text-[#1E1116]/60">
-                        Pay by cash or UPI when your order arrives
                       </p>
                     </div>
                   </button>
@@ -871,10 +967,19 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onViewOrderTracking }) =
                 <button
                   type="submit"
                   form="checkout-form"
+                  data-testid="checkout-submit-btn"
                   disabled={submitting}
                   className="flex-1 py-3 px-5 rounded-xl bg-[#1E1116] hover:bg-[#C89D7C] text-[#FFFDFB] hover:text-[#1E1116] text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
                 >
-                  <span>{submitting ? 'Placing Order...' : `Place Order · ₹${totals.totalAmount}`}</span>
+                  <span>
+                    {submitting
+                      ? paymentMode === 'Razorpay Online (UPI / Cards / NetBanking)'
+                        ? 'Opening Razorpay Gateway...'
+                        : 'Placing Order...'
+                      : paymentMode === 'Razorpay Online (UPI / Cards / NetBanking)'
+                      ? `Pay Now via Razorpay · ₹${totals.totalAmount}`
+                      : `Place Order · ₹${totals.totalAmount}`}
+                  </span>
                 </button>
               </div>
             )}
