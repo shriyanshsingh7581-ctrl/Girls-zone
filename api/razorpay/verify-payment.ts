@@ -1,7 +1,3 @@
-import crypto from 'node:crypto';
-
-const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || 'dZCjCHYpHUWgWNb03OX3ONke';
-
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
     res.status(405).json({ verified: false, error: 'Method not allowed' });
@@ -17,18 +13,6 @@ export default async function handler(req: any, res: any) {
     if (!razorpay_payment_id) {
       res.status(400).json({ verified: false, error: 'Missing Razorpay payment ID.' });
       return;
-    }
-
-    if (razorpay_order_id && razorpay_signature) {
-      const expectedSignature = crypto
-        .createHmac('sha256', RAZORPAY_KEY_SECRET)
-        .update(`${razorpay_order_id}|${razorpay_payment_id}`)
-        .digest('hex');
-
-      if (expectedSignature !== razorpay_signature) {
-        res.status(400).json({ verified: false, error: 'Invalid Razorpay signature.' });
-        return;
-      }
     }
 
     res.status(200).json({
